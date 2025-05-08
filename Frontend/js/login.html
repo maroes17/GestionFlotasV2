@@ -1,0 +1,213 @@
+<script>
+// Estado global de autenticación
+let isAuthenticating = false;
+let authenticationRequired = true; // Forzar siempre autenticación
+
+// Inicialización cuando el documento está listo
+$(document).ready(function() {
+  // Mostrar directamente las opciones de login
+  showLoginOptions();
+  
+  // Manejador para el botón de Google Sign In
+  $('#googleSignIn').on('click', function() {
+    if (!isAuthenticating) {
+      handleGoogleSignIn();
+    }
+  });
+  
+  // Manejador para el formulario de email/contraseña
+  $('#emailLoginForm').on('submit', function(e) {
+    e.preventDefault();
+    if (!isAuthenticating) {
+      handleEmailLogin();
+    }
+  });
+  
+  // Botón para mostrar/ocultar contraseña
+  $('.toggle-password').on('click', function() {
+    const passwordField = $('#password');
+    const type = passwordField.attr('type') === 'password' ? 'text' : 'password';
+    passwordField.attr('type', type);
+    
+    // Cambiar el ícono
+    $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+  });
+  
+  // Llenar automáticamente el email si está guardado
+  const savedEmail = localStorage.getItem('userEmail');
+  if (savedEmail) {
+    $('#email').val(savedEmail);
+  }
+});
+
+// Mostrar opciones de login
+function showLoginOptions() {
+  $('#loginStatus').hide();
+  $('#loginOptions').fadeIn();
+}
+
+// Manejar el inicio de sesión con Google
+function handleGoogleSignIn() {
+  isAuthenticating = true;
+  setLoading(true, 'google');
+  
+  google.script.run
+    .withSuccessHandler(handleAuthSuccess)
+    .withFailureHandler(handleAuthError)
+    .authenticateUser();
+}
+
+// Manejar el inicio de sesión con email y contraseña
+function handleEmailLogin() {
+  const email = $('#email').val().trim();
+  const password = $('#password').val();
+  
+  // Validación básica
+  if (!email || !password) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Campos vacíos',
+      text: 'Por favor, completa todos los campos.',
+      confirmButtonText: 'Entendido'
+    });
+    return;
+  }
+  
+  // Guardar el email para futuras sesiones
+  localStorage.setItem('userEmail', email);
+  
+  isAuthenticating = true;
+  setLoading(true, 'email');
+  
+  google.script.run
+    .withSuccessHandler(handleAuthSuccess)
+    .withFailureHandler(handleAuthError)
+    .authenticateWithPassword(email, password);
+}
+
+// Manejar respuesta exitosa de autenticación
+function handleAuthSuccess(response) {
+  isAuthenticating = false;
+  setLoading(false);
+  
+  if (response.success) {
+    if (response.hasAccess) {
+      // Guardar información del usuario para uso futuro
+      if (response.email) {
+        localStorage.setItem('userEmail', response.email);
+      }
+      showSuccessAndLoadDashboard(response);
+    } else {
+      showNoAccessError(response.email);
+    }
+  } else {
+    showAuthError(response.message || 'Error de autenticación');
+  }
+}
+
+// Manejar error de autenticación
+function handleAuthError(error) {
+  isAuthenticating = false;
+  setLoading(false);
+  
+  Swal.fire({
+    icon: 'error',
+    title: 'Error de Autenticación',
+    text: error.message || 'Ha ocurrido un error durante la autenticación',
+    confirmButtonText: 'Entendido'
+  });
+  
+  $('.login-box').addClass('error-shake');
+  setTimeout(() => $('.login-box').removeClass('error-shake'), 500);
+}
+
+// Mostrar mensaje de éxito y cargar dashboard
+function showSuccessAndLoadDashboard(userData) {
+  const userName = userData && userData.name ? userData.name : 'Usuario';
+  
+  Swal.fire({
+    icon: 'success',
+    title: `¡Bienvenido, ${userName}!`,
+    text: 'Iniciando sesión...',
+    timer: 1500,
+    showConfirmButton: false
+  }).then(() => {
+    loadDashboard();
+  });
+}
+
+// Cargar el dashboard en la misma página
+function loadDashboard() {
+  // Mostrar indicador de carga
+  $('body').html('<div class="d-flex justify-content-center align-items-center" style="height: 100vh;"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div></div>');
+  
+  // Cargar el contenido del dashboard
+  google.script.run
+    .withSuccessHandler(function(dashboardHtml) {
+      // Reemplazar todo el contenido de la página con el dashboard
+      document.open();
+      document.write(dashboardHtml);
+      document.close();
+    })
+    .withFailureHandler(function(error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudo cargar el dashboard: ' + (error.message || 'Error desconocido'),
+        confirmButtonText: 'Reintentar'
+      }).then(() => {
+        window.location.reload();
+      });
+    })
+    .getDashboardHTML();
+}
+
+// Mostrar error de acceso no autorizado
+function showNoAccessError(email) {
+  Swal.fire({
+    icon: 'warning',
+    title: 'Acceso No Autorizado',
+    html: `Tu cuenta <strong>${email}</strong> no tiene acceso al sistema.<br>Por favor, contacta al administrador.`,
+    confirmButtonText: 'Entendido'
+  });
+}
+
+// Mostrar error de autenticación
+function showAuthError(message) {
+  Swal.fire({
+    icon: 'error',
+    title: 'Error',
+    text: message,
+    confirmButtonText: 'Intentar de nuevo'
+  });
+}
+
+// Establecer estado de carga
+function setLoading(loading, type = 'google') {
+  const $loginBox = $('.login-box');
+  
+  if (loading) {
+    $loginBox.addClass('loading');
+    
+    if (type === 'google') {
+      // Deshabilitar botón de Google
+      $('#googleSignIn').prop('disabled', true)
+        .html('<i class="fas fa-spinner fa-spin me-2"></i>Iniciando sesión...');
+    } else {
+      // Deshabilitar formulario de email
+      $('#emailLoginForm button[type="submit"]').prop('disabled', true)
+        .html('<i class="fas fa-spinner fa-spin me-2"></i>Iniciando sesión...');
+    }
+  } else {
+    $loginBox.removeClass('loading');
+    
+    // Restaurar botón de Google
+    $('#googleSignIn').prop('disabled', false)
+      .html('<i class="fab fa-google me-2"></i>Continuar con Google');
+    
+    // Restaurar botón del formulario
+    $('#emailLoginForm button[type="submit"]').prop('disabled', false)
+      .html('<i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión');
+  }
+}
+</script> 

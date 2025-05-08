@@ -1,0 +1,522 @@
+<script>
+let tripsChart = null;
+let expensesChart = null;
+let lastUpdate = 0;
+const UPDATE_INTERVAL = 30000; // 30 segundos mínimo entre actualizaciones
+
+// Inicialización cuando el documento está listo
+$(document).ready(function() {
+  loadUserInfo();
+  initializeCharts();
+  loadDashboardData();
+
+  // Inicializar el estado del sidebar desde localStorage
+  const sidebarState = localStorage.getItem('sidebarState');
+  if (sidebarState === 'collapsed') {
+    $('#sidebar').addClass('active');
+  }
+
+  // Toggle del sidebar
+  $('#sidebarCollapse, #sidebarCollapseTop').on('click', function() {
+    $('#sidebar').toggleClass('active');
+    localStorage.setItem('sidebarState', $('#sidebar').hasClass('active') ? 'collapsed' : 'expanded');
+  });
+
+  // Manejo de items del menú con debounce
+  $('.nav-item a').on('click', debounce(function(e) {
+    e.preventDefault();
+    
+    $('.nav-item').removeClass('active');
+    $(this).parent().addClass('active');
+    
+    const module = $(this).data('module');
+    
+    $('#content-area').fadeOut(200, function() {
+      showModule(module);
+      $(this).fadeIn(200);
+    });
+    
+    if ($(window).width() <= 768) {
+      $('#sidebar').removeClass('active');
+    }
+  }, 300));
+
+  // Detectar cambios de tamaño de ventana con throttle
+  $(window).on('resize', throttle(function() {
+    adjustLayout();
+  }, 250));
+});
+
+// Función debounce para evitar múltiples llamadas
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Función throttle para limitar la frecuencia de llamadas
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// Cargar información del usuario
+function loadUserInfo() {
+  google.script.run
+    .withSuccessHandler(function(userInfo) {
+      $('#userInfo').html(`
+        <i class="fas fa-user"></i> ${userInfo.name} (${userInfo.role})
+      `);
+      
+      // Mostrar/ocultar opciones de administrador
+      if (userInfo.role === 'Administrador') {
+        $('.admin-only').show();
+      }
+    })
+    .withFailureHandler(showError)
+    .getCurrentUser();
+}
+
+// Función para verificar si un elemento existe en el DOM
+function elementExists(id) {
+  return document.getElementById(id) !== null;
+}
+
+// Función para mostrar/ocultar placeholder
+function togglePlaceholder(chartId, show) {
+  const container = document.getElementById(`${chartId}Container`);
+  if (container) {
+    const placeholder = container.querySelector('.chart-placeholder');
+    if (placeholder) {
+      placeholder.style.display = show ? 'block' : 'none';
+    }
+  }
+}
+
+// Función para mostrar/ocultar error
+function toggleError(chartId, show, message = '') {
+  const container = document.getElementById(`${chartId}Container`);
+  if (container) {
+    const error = container.querySelector('.chart-error');
+    if (error) {
+      const messageEl = error.querySelector('p');
+      if (messageEl) {
+        messageEl.textContent = message || 'Error al cargar el gráfico';
+      }
+      error.style.display = show ? 'block' : 'none';
+    }
+  }
+}
+
+// Inicializar gráficos
+function initializeCharts() {
+  try {
+    // Verificar si los elementos existen
+    if (!elementExists('tripsChart') || !elementExists('expensesChart')) {
+      console.error('No se encontraron los elementos de los gráficos');
+      return;
+    }
+
+    // Destruir instancias previas si existen
+    if (tripsChart) {
+      tripsChart.destroy();
+      tripsChart = null;
+    }
+    if (expensesChart) {
+      expensesChart.destroy();
+      expensesChart = null;
+    }
+
+    // Configuración común para los gráficos
+    const commonOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 750
+      },
+      plugins: {
+        legend: {
+          position: 'bottom'
+        }
+      },
+      onResize: function(chart, size) {
+        // Limitar el tamaño máximo
+        if (size.height > 300) {
+          size.height = 300;
+        }
+      }
+    };
+
+    // Inicializar gráfico de viajes
+    const tripsCtx = document.getElementById('tripsChart').getContext('2d');
+    tripsChart = new Chart(tripsCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Viajes Completados',
+          data: [],
+          borderColor: '#2470dc',
+          tension: 0.1,
+          fill: false
+        }]
+      },
+      options: {
+        ...commonOptions,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: 0
+            }
+          }
+        }
+      }
+    });
+
+    // Inicializar gráfico de gastos
+    const expensesCtx = document.getElementById('expensesChart').getContext('2d');
+    expensesChart = new Chart(expensesCtx, {
+      type: 'doughnut',
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          backgroundColor: [
+            '#2470dc',
+            '#dc3545',
+            '#ffc107',
+            '#198754',
+            '#6c757d'
+          ]
+        }]
+      },
+      options: {
+        ...commonOptions,
+        cutout: '60%'
+      }
+    });
+
+    // Ocultar placeholders inicialmente
+    togglePlaceholder('trips', false);
+    togglePlaceholder('expenses', false);
+    toggleError('trips', false);
+    toggleError('expenses', false);
+
+  } catch (error) {
+    console.error('Error al inicializar los gráficos:', error);
+    toggleError('trips', true);
+    toggleError('expenses', true);
+  }
+}
+
+// Cargar datos del dashboard con control de frecuencia
+function loadDashboardData() {
+  const now = Date.now();
+  if (now - lastUpdate < UPDATE_INTERVAL) {
+    return;
+  }
+  
+  showLoading(true);
+  lastUpdate = now;
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data || !data.kpis) {
+        showError({ message: 'No se pudieron cargar los datos del dashboard' });
+        showLoading(false);
+        return;
+      }
+      
+      requestAnimationFrame(() => {
+        updateKPIs(data.kpis);
+        updateCharts(data.charts);
+        updateRecentActivity(data.recentActivity || []);
+        showLoading(false);
+      });
+    })
+    .withFailureHandler(function(error) {
+      showError(error);
+      showLoading(false);
+    })
+    .getDashboardData();
+}
+
+// Actualizar KPIs
+function updateKPIs(kpis) {
+  $('#activeVehicles').text(kpis.activeVehicles || '--');
+  $('#activeTrips').text(kpis.activeTrips || '--');
+  $('#pendingMaintenance').text(kpis.pendingMaintenance || '--');
+  $('#expiringPolicies').text(kpis.expiringPolicies || '--');
+}
+
+// Actualizar gráficos de manera optimizada
+function updateCharts(chartData) {
+  if (!chartData) {
+    togglePlaceholder('trips', true);
+    togglePlaceholder('expenses', true);
+    return;
+  }
+
+  try {
+    // Actualizar gráfico de viajes
+    if (tripsChart && chartData.trips) {
+      const hasData = chartData.trips.data && chartData.trips.data.length > 0;
+      togglePlaceholder('trips', !hasData);
+      
+      if (hasData) {
+        tripsChart.data.labels = chartData.trips.labels;
+        tripsChart.data.datasets[0].data = chartData.trips.data;
+        tripsChart.update('none');
+      }
+    }
+
+    // Actualizar gráfico de gastos
+    if (expensesChart && chartData.expenses) {
+      const hasData = chartData.expenses.data && chartData.expenses.data.length > 0;
+      togglePlaceholder('expenses', !hasData);
+      
+      if (hasData) {
+        expensesChart.data.labels = chartData.expenses.labels;
+        expensesChart.data.datasets[0].data = chartData.expenses.data;
+        expensesChart.update('none');
+      }
+    }
+  } catch (error) {
+    console.error('Error al actualizar los gráficos:', error);
+    toggleError('trips', true);
+    toggleError('expenses', true);
+  }
+}
+
+// Actualizar actividad reciente
+function updateRecentActivity(activities) {
+  const tbody = $('#recentActivity');
+  tbody.empty();
+
+  activities.forEach(activity => {
+    const statusClass = getStatusClass(activity.status);
+    tbody.append(`
+      <tr>
+        <td>${new Date(activity.date).toLocaleString('es-AR')}</td>
+        <td>${activity.type}</td>
+        <td>${activity.description}</td>
+        <td><span class="status-badge ${statusClass}">${activity.status}</span></td>
+      </tr>
+    `);
+  });
+}
+
+// Obtener clase CSS según estado
+function getStatusClass(status) {
+  const statusMap = {
+    'Completado': 'status-success',
+    'En Curso': 'status-info',
+    'Pendiente': 'status-warning',
+    'Cancelado': 'status-danger'
+  };
+  return statusMap[status] || 'status-info';
+}
+
+// Mostrar/ocultar indicador de carga
+function showLoading(show) {
+  if (show) {
+    $('main').addClass('loading');
+  } else {
+    $('main').removeClass('loading');
+  }
+}
+
+// Refrescar datos con control de frecuencia
+function refreshData() {
+  const now = Date.now();
+  if (now - lastUpdate < UPDATE_INTERVAL) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Espere un momento',
+      text: 'Los datos se actualizaron recientemente. Por favor, espere unos segundos antes de actualizar nuevamente.',
+      timer: 2000,
+      showConfirmButton: false
+    });
+    return;
+  }
+  loadDashboardData();
+}
+
+// Mostrar módulo específico
+function showModule(moduleName) {
+  // Guardar el módulo actual en el estado
+  localStorage.setItem('currentModule', moduleName);
+  
+  // Actualizar título de la página
+  updatePageTitle(moduleName);
+  
+  // Mostrar contenido según el módulo
+  switch(moduleName) {
+    case 'dashboard':
+      loadDashboardData();
+      break;
+    case 'vehicles':
+    case 'trailers':
+    case 'drivers':
+    case 'trips':
+    case 'expenses':
+    case 'incidents':
+    case 'insurance':
+    case 'maintenance':
+    case 'clients':
+      showModuleUnderConstruction(moduleName);
+      break;
+    case 'users':
+      if (hasAdminRole()) {
+        loadUserManagement();
+      } else {
+        showUnauthorizedMessage();
+      }
+      break;
+    default:
+      showError('Módulo no encontrado');
+  }
+}
+
+// Actualizar título de la página
+function updatePageTitle(moduleName) {
+  const titles = {
+    dashboard: 'Dashboard',
+    vehicles: 'Gestión de Vehículos',
+    trailers: 'Gestión de Semirremolques',
+    drivers: 'Gestión de Choferes',
+    trips: 'Control de Viajes',
+    expenses: 'Gastos y Anticipos',
+    incidents: 'Registro de Incidentes',
+    insurance: 'Gestión de Pólizas',
+    maintenance: 'Mantenimiento',
+    clients: 'Gestión de Clientes',
+    users: 'Gestión de Usuarios'
+  };
+  
+  $('#pageTitle').text(titles[moduleName] || 'Sistema de Gestión de Flota');
+}
+
+// Mostrar mensaje de módulo en construcción
+function showModuleUnderConstruction(moduleName) {
+  Swal.fire({
+    icon: 'info',
+    title: 'Módulo en Desarrollo',
+    text: `El módulo de ${getModuleTitle(moduleName)} estará disponible próximamente.`,
+    confirmButtonText: 'Entendido'
+  });
+}
+
+// Obtener título del módulo
+function getModuleTitle(moduleName) {
+  const titles = {
+    vehicles: 'Vehículos',
+    trailers: 'Semirremolques',
+    drivers: 'Choferes',
+    trips: 'Viajes',
+    expenses: 'Gastos y Anticipos',
+    incidents: 'Incidentes',
+    insurance: 'Pólizas',
+    maintenance: 'Mantenimiento',
+    clients: 'Clientes',
+    users: 'Usuarios'
+  };
+  return titles[moduleName] || moduleName;
+}
+
+// Verificar rol de administrador
+function hasAdminRole() {
+  return userRole === 'Administrador';
+}
+
+// Mostrar mensaje de no autorizado
+function showUnauthorizedMessage() {
+  Swal.fire({
+    icon: 'error',
+    title: 'Acceso Denegado',
+    text: 'No tienes permisos para acceder a este módulo.',
+    confirmButtonText: 'Entendido'
+  });
+}
+
+// Mostrar error
+function showError(error) {
+  Swal.fire({
+    icon: 'error',
+    title: 'Error',
+    text: error.message || 'Ha ocurrido un error'
+  });
+}
+
+// Ajustar layout según el tamaño de la ventana
+function adjustLayout() {
+  if ($(window).width() <= 768) {
+    $('#sidebar').addClass('mobile');
+  } else {
+    $('#sidebar').removeClass('mobile');
+  }
+}
+
+// Cerrar sesión
+function logout() {
+  // Mostrar confirmación
+  Swal.fire({
+    title: '¿Cerrar sesión?',
+    text: '¿Estás seguro que deseas cerrar sesión?',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, cerrar sesión',
+    cancelButtonText: 'Cancelar'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: 'Cerrando sesión...',
+        text: 'Por favor espera...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+      
+      // Limpiar el almacenamiento local (excepto el email para conveniencia)
+      const savedEmail = localStorage.getItem('userEmail');
+      localStorage.clear();
+      if (savedEmail) {
+        localStorage.setItem('userEmail', savedEmail);
+      }
+      
+      // Obtener la URL base de la aplicación
+      google.script.run
+        .withSuccessHandler(function(url) {
+          // Redireccionar a la URL de la aplicación con el parámetro de logout
+          const logoutUrl = url + (url.includes('?') ? '&' : '?') + 'action=logout';
+          window.top.location.href = logoutUrl;
+        })
+        .withFailureHandler(function(error) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo cerrar sesión: ' + (error.message || 'Error desconocido'),
+            confirmButtonText: 'Entendido'
+          });
+        })
+        .getScriptURL();
+    }
+  });
+}
+</script> 

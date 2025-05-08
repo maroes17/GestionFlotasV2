@@ -1,0 +1,184 @@
+<script>
+let usersTable;
+let editingUserId = null;
+
+// Inicialización cuando el documento está listo
+$(document).ready(function() {
+  initializeDataTable();
+  loadUsers();
+});
+
+// Inicializar DataTable con configuración en español
+function initializeDataTable() {
+  usersTable = $('#usersTable').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
+    },
+    columns: [
+      { data: 'email' },
+      { data: 'name' },
+      { data: 'role' },
+      { 
+        data: 'status',
+        render: function(data) {
+          const statusClass = data === 'Activo' ? 'status-active' : 'status-inactive';
+          return `<span class="status-badge ${statusClass}">${data}</span>`;
+        }
+      },
+      { 
+        data: 'lastLogin',
+        render: function(data) {
+          return new Date(data).toLocaleString('es-AR');
+        }
+      },
+      {
+        data: null,
+        render: function(data, type, row) {
+          return `
+            <button class="btn btn-sm btn-primary btn-action" onclick="editUser('${row.email}')">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger btn-action" onclick="deleteUser('${row.email}')">
+              <i class="fas fa-trash"></i>
+            </button>`;
+        }
+      }
+    ]
+  });
+}
+
+// Cargar usuarios desde el servidor
+function loadUsers() {
+  google.script.run
+    .withSuccessHandler(function(users) {
+      usersTable.clear();
+      usersTable.rows.add(users);
+      usersTable.draw();
+    })
+    .withFailureHandler(showError)
+    .getUsers();
+}
+
+// Mostrar modal para agregar usuario
+function showAddUserModal() {
+  editingUserId = null;
+  $('#modalTitle').text('Nuevo Usuario');
+  $('#userForm')[0].reset();
+  $('#userModal').modal('show');
+}
+
+// Mostrar modal para editar usuario
+function editUser(email) {
+  editingUserId = email;
+  google.script.run
+    .withSuccessHandler(function(user) {
+      $('#modalTitle').text('Editar Usuario');
+      $('#email').val(user.email);
+      $('#name').val(user.name);
+      $('#role').val(user.role);
+      $('#status').val(user.status);
+      $('#userModal').modal('show');
+    })
+    .withFailureHandler(showError)
+    .getUserByEmail(email);
+}
+
+// Guardar usuario (crear o actualizar)
+function saveUser() {
+  const userData = {
+    email: $('#email').val(),
+    name: $('#name').val(),
+    role: $('#role').val(),
+    status: $('#status').val()
+  };
+
+  if (!validateUserData(userData)) return;
+
+  const operation = editingUserId ? 'updateUser' : 'addUser';
+  
+  Swal.fire({
+    title: 'Guardando...',
+    didOpen: () => {
+      Swal.showLoading();
+      google.script.run
+        .withSuccessHandler(function() {
+          Swal.fire({
+            icon: 'success',
+            title: 'Usuario guardado correctamente',
+            showConfirmButton: false,
+            timer: 1500
+          });
+          $('#userModal').modal('hide');
+          loadUsers();
+        })
+        .withFailureHandler(showError)
+        [operation](userData);
+    }
+  });
+}
+
+// Eliminar usuario
+function deleteUser(email) {
+  Swal.fire({
+    title: '¿Estás seguro?',
+    text: "Esta acción no se puede deshacer",
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      google.script.run
+        .withSuccessHandler(function() {
+          Swal.fire(
+            'Eliminado!',
+            'El usuario ha sido eliminado.',
+            'success'
+          );
+          loadUsers();
+        })
+        .withFailureHandler(showError)
+        .deleteUser(email);
+    }
+  });
+}
+
+// Validar datos del usuario
+function validateUserData(userData) {
+  if (!userData.email || !userData.name || !userData.role || !userData.status) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error de validación',
+      text: 'Todos los campos son obligatorios'
+    });
+    return false;
+  }
+  
+  if (!isValidEmail(userData.email)) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error de validación',
+      text: 'El email no es válido'
+    });
+    return false;
+  }
+  
+  return true;
+}
+
+// Validar formato de email
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// Mostrar error
+function showError(error) {
+  Swal.fire({
+    icon: 'error',
+    title: 'Error',
+    text: error.message || 'Ha ocurrido un error'
+  });
+}
+</script> 
