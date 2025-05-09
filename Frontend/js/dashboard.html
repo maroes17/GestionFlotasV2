@@ -891,42 +891,155 @@ function loadModuleTemplate(moduleName) {
  */
 function loadUserManagement() {
   const contentArea = $('#content-area');
-  
-  // Crear contenedor para el módulo de usuarios
-  const moduleContainer = $('<div class="module-container users-container"></div>');
+  contentArea.empty();
   
   // Mostrar indicador de carga
-  moduleContainer.html('<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div><p class="mt-3">Cargando gestión de usuarios...</p></div>');
-  
-  // Añadir al contenedor principal
-  contentArea.append(moduleContainer);
-  
-  // Cargar la interfaz de usuarios desde el servidor
+  contentArea.html('<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3">Cargando gestión de usuarios...</p></div>');
+
+  // Primero ejecutar el diagnóstico
   google.script.run
-    .withSuccessHandler(function(userList) {
-      // Actualizar contenido del módulo con la interfaz de usuarios
-      moduleContainer.html('<div class="row mb-4"><div class="col-12"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="card-title mb-0">Gestión de Usuarios</h5><button type="button" class="btn btn-primary btn-sm" onclick="addUserModal()"> <i class="fas fa-plus"></i> Nuevo Usuario</button></div><div class="card-body"><div class="table-responsive"><table class="table table-striped table-hover" id="usersTable"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Última Conexión</th><th>Acciones</th></tr></thead><tbody id="usersList">' + generateUserRows(userList) + '</tbody></table></div></div></div></div></div></div></div>');
+    .withSuccessHandler(function(diagnosticResult) {
+      console.log('Diagnóstico de usuario:', diagnosticResult);
+      
+      if (!diagnosticResult.isAdmin) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error de permisos',
+          text: 'No tienes permisos de administrador. Rol actual: ' + (diagnosticResult.userInfo ? diagnosticResult.userInfo.role : 'No definido'),
+          confirmButtonText: 'Entendido'
+        }).then(() => {
+          $('.nav-item a[data-module="dashboard"]').click();
+        });
+        return;
+      }
+
+      // Si el diagnóstico es exitoso, cargar el módulo
+      google.script.run
+        .withSuccessHandler(function(html) {
+          contentArea.html(html);
+          
+          $(function() {
+            if (typeof $ === 'undefined') {
+              console.error('jQuery no está disponible');
+              showError('Error: jQuery no está disponible');
+              return;
+            }
+            if (typeof $.fn.DataTable === 'undefined') {
+              console.error('DataTables no está disponible');
+              showError('Error: DataTables no está disponible');
+              return;
+            }
+
+            // Cargar los datos de usuarios con diagnóstico adicional
+            google.script.run
+              .withSuccessHandler(function(userList) {
+                console.log('Respuesta de getUsers:', userList);
+                
+                if (userList === null) {
+                  // Intentar recargar la página una vez
+                  if (!window.hasReloaded) {
+                    window.hasReloaded = true;
+                    console.log('Intentando recargar la página...');
+                    location.reload();
+                    return;
+                  }
+                  
+                  console.error('getUsers retornó null después de recargar');
+                  Swal.fire({
+                    icon: 'error',
+                    title: 'Error de acceso',
+                    text: 'No se pudieron cargar los datos de usuarios. Por favor, cierra sesión y vuelve a intentar.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Cerrar sesión',
+                    cancelButtonText: 'Volver al dashboard'
+                  }).then((result) => {
+                    if (result.isConfirmed) {
+                      logout();
+                    } else {
+                      $('.nav-item a[data-module="dashboard"]').click();
+                    }
+                  });
+                  return;
+                }
+
+                if (!Array.isArray(userList)) {
+                  console.error('getUsers no retornó un array:', userList);
+                  showError('Error: Formato de datos inválido');
+                  return;
+                }
+
+                if (userList.length === 0) {
+                  console.log('Lista de usuarios vacía');
+                  $('#usersTable').DataTable({
+                    language: {
+                      url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json',
+                      emptyTable: 'No hay usuarios registrados en el sistema'
+                    }
+                  });
+                  return;
+                }
+
+                // Inicializar DataTable con los datos
+                const table = $('#usersTable').DataTable({
+                  data: userList,
+                  language: {
+                    url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
+                  },
+                  columns: [
+                    { data: 'email' },
+                    { data: 'name' },
+                    { data: 'role' },
+                    { 
+                      data: 'status',
+                      render: function(data) {
+                        return `<span class="badge ${data === 'Activo' ? 'bg-success' : 'bg-danger'}">${data}</span>`;
+                      }
+                    },
+                    { 
+                      data: 'lastLogin',
+                      render: function(data) {
+                        return data ? new Date(data).toLocaleString('es-ES') : 'Nunca';
+                      }
+                    },
+                    {
+                      data: null,
+                      orderable: false,
+                      render: function(data) {
+                        return `
+                          <button class="btn btn-sm btn-primary me-1" onclick="editUser('${data.email}')">
+                            <i class="fas fa-edit"></i>
+                          </button>
+                          <button class="btn btn-sm btn-danger" onclick="deleteUser('${data.email}')">
+                            <i class="fas fa-trash"></i>
+                          </button>`;
+                      }
+                    }
+                  ],
+                  order: [[0, 'asc']],
+                  pageLength: 10,
+                  responsive: true
+                });
+
+                console.log('DataTable inicializada correctamente');
+              })
+              .withFailureHandler(function(error) {
+                console.error('Error al cargar usuarios:', error);
+                showError('Error al cargar usuarios: ' + (error.message || 'Error desconocido'));
+              })
+              .getUsers();
+          });
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error al cargar plantilla:', error);
+          showError('Error al cargar plantilla: ' + (error.message || 'Error desconocido'));
+        })
+        .include('Frontend/html/userManagement');
     })
     .withFailureHandler(function(error) {
-      moduleContainer.html('<div class="row mb-4"><div class="col-12"><div class="card"><div class="card-body text-center py-5"><i class="fas fa-exclamation-circle fa-4x text-danger mb-3"></i><h3>Error al cargar los usuarios</h3><p class="lead">' + (error.message || 'Ha ocurrido un error inesperado') + '</p><button type="button" class="btn btn-primary mt-3" onclick="retryLoadUsers()"> <i class="fas fa-sync-alt"></i> Reintentar</button></div></div></div></div></div></div></div>');
+      console.error('Error en diagnóstico:', error);
+      showError('Error en diagnóstico: ' + (error.message || 'Error desconocido'));
     })
-    .getUsers(); // Llamar a la función del servidor para obtener usuarios
-}
-
-/**
- * Genera las filas HTML para la tabla de usuarios
- */
-function generateUserRows(users) {
-  if (!users || !users.length) {
-    return '<tr><td colspan="6" class="text-center">No hay usuarios registrados</td></tr>';
-  }
-  
-  return users.map(function(user) {
-    const lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleString('es-AR') : 'Nunca';
-    var statusClass = user.status === 'Activo' ? 'text-success' : 'text-danger';
-    
-    return '<tr data-email="' + user.email + '"><td>' + user.email + '</td><td>' + user.name + '</td><td>' + user.role + '</td><td><span class="' + statusClass + '">' + user.status + '</span></td><td>' + lastLogin + '</td><td><div class="btn-group btn-group-sm" role="group"><button type="button" class="btn btn-outline-primary" onclick="editUser(\'' + user.email + '\')"><i class="fas fa-edit"></i></button><button type="button" class="btn btn-outline-danger" onclick="deleteUser(\'' + user.email + '\')"><i class="fas fa-trash-alt"></i></button></div></td></tr>';
-  }).join('');
+    .diagnosticUserStatus();
 }
 
 /**
@@ -943,7 +1056,13 @@ function retryLoadUsers() {
 function addUserModal() {
   Swal.fire({
     title: 'Nuevo Usuario',
-    html: '<form id="addUserForm" class="text-start"><div class="mb-3"><label for="userEmail" class="form-label">Email *</label><input type="email" class="form-control" id="userEmail" required></div><div class="mb-3"><label for="userName" class="form-label">Nombre *</label><input type="text" class="form-control" id="userName" required></div><div class="mb-3"><label for="userRole" class="form-label">Rol *</label><select class="form-select" id="userRole" required><option value="">Seleccionar...</option><option value="Administrador">Administrador</option><option value="Supervisor">Supervisor</option><option value="Operador">Operador</option></select></div><div class="mb-3"><label for="userStatus" class="form-label">Estado *</label><select class="form-select" id="userStatus" required><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div></form>',
+    html: '<form id="addUserForm" class="text-start">' +
+          '<div class="mb-3"><label for="userEmail" class="form-label">Email *</label><input type="email" class="form-control" id="userEmail" required></div>' +
+          '<div class="mb-3"><label for="userName" class="form-label">Nombre *</label><input type="text" class="form-control" id="userName" required></div>' +
+          '<div class="mb-3"><label for="userRole" class="form-label">Rol *</label><select class="form-select" id="userRole" required>' +
+          '<option value="">Seleccionar...</option><option value="Administrador">Administrador</option><option value="Supervisor">Supervisor</option><option value="Operador">Operador</option></select></div>' +
+          '<div class="mb-3"><label for="userStatus" class="form-label">Estado *</label><select class="form-select" id="userStatus" required>' +
+          '<option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div></form>',
     showCancelButton: true,
     confirmButtonText: 'Guardar',
     cancelButtonText: 'Cancelar',
@@ -954,14 +1073,12 @@ function addUserModal() {
         form.reportValidity();
         return false;
       }
-      
       const userData = {
         email: document.getElementById('userEmail').value,
         name: document.getElementById('userName').value,
         role: document.getElementById('userRole').value,
         status: document.getElementById('userStatus').value
       };
-      
       return new Promise(function(resolve) {
         google.script.run
           .withSuccessHandler(resolve)

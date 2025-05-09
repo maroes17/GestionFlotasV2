@@ -16,23 +16,45 @@ const ROLES = {
 function checkUserAuth() {
   try {
     const user = Session.getActiveUser();
+    Logger.log('checkUserAuth: Verificando usuario activo');
+    
     if (!user || !user.getEmail()) {
-      return { isAuthenticated: false };
+      Logger.log('checkUserAuth: No hay usuario activo');
+      return { 
+        isAuthenticated: false,
+        message: 'No hay usuario activo'
+      };
     }
 
-    const userInfo = getUserInfo(user.getEmail());
+    const email = user.getEmail();
+    Logger.log('checkUserAuth: Usuario activo - ' + email);
+
+    const userInfo = getUserInfo(email);
     if (!userInfo) {
-      return { isAuthenticated: false };
+      Logger.log('checkUserAuth: Usuario no encontrado o inactivo - ' + email);
+      return { 
+        isAuthenticated: false,
+        message: 'Usuario no encontrado o inactivo',
+        email: email
+      };
     }
 
+    Logger.log('checkUserAuth: Autenticación exitosa - ' + JSON.stringify(userInfo));
     return {
       isAuthenticated: true,
       hasAccess: true,
-      ...userInfo
+      email: userInfo.email,
+      name: userInfo.name,
+      role: userInfo.role,
+      message: 'Autenticación exitosa'
     };
   } catch (error) {
+    Logger.log('Error en checkUserAuth: ' + error);
     console.error('Error en checkUserAuth:', error);
-    return { isAuthenticated: false };
+    return { 
+      isAuthenticated: false,
+      message: 'Error durante la autenticación: ' + error.message
+    };
   }
 }
 
@@ -88,35 +110,60 @@ function getSystemSpreadsheet() {
  * Obtiene la información del usuario desde la hoja de usuarios
  */
 function getUserInfo(email) {
-  const ss = getSystemSpreadsheet();
-  const usersSheet = ss.getSheetByName('Users');
-  
-  if (!usersSheet) {
-    throw new Error('La hoja de usuarios no está configurada');
-  }
-
-  const data = usersSheet.getDataRange().getValues();
-  const headers = data[0];
-  const emailCol = headers.indexOf('Email');
-  const nameCol = headers.indexOf('Nombre');
-  const roleCol = headers.indexOf('Rol');
-  const statusCol = headers.indexOf('Estado');
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][emailCol] === email) {
-      if (data[i][statusCol] !== 'Activo') {
-        return null; // Usuario inactivo
-      }
-
-      return {
-        email: data[i][emailCol],
-        name: data[i][nameCol],
-        role: data[i][roleCol]
-      };
+  try {
+    Logger.log('getUserInfo: Buscando información para el usuario: ' + email);
+    
+    const ss = getSystemSpreadsheet();
+    const usersSheet = ss.getSheetByName('Users');
+    
+    if (!usersSheet) {
+      Logger.log('getUserInfo: La hoja de usuarios no está configurada');
+      throw new Error('La hoja de usuarios no está configurada');
     }
-  }
 
-  return null; // Usuario no encontrado
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    
+    // Verificar estructura de la hoja
+    const emailCol = headers.indexOf('Email');
+    const nameCol = headers.indexOf('Nombre');
+    const roleCol = headers.indexOf('Rol');
+    const statusCol = headers.indexOf('Estado');
+
+    if (emailCol === -1 || nameCol === -1 || roleCol === -1 || statusCol === -1) {
+      Logger.log('getUserInfo: Estructura de hoja inválida. Columnas encontradas: ' + headers.join(', '));
+      throw new Error('Estructura de hoja inválida');
+    }
+
+    Logger.log('getUserInfo: Buscando en ' + data.length + ' filas');
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][emailCol] === email) {
+        Logger.log('getUserInfo: Usuario encontrado en la fila ' + (i + 1));
+        
+        if (data[i][statusCol] !== 'Activo') {
+          Logger.log('getUserInfo: Usuario inactivo - ' + email);
+          return null;
+        }
+
+        const userInfo = {
+          email: data[i][emailCol],
+          name: data[i][nameCol],
+          role: data[i][roleCol]
+        };
+        
+        Logger.log('getUserInfo: Información recuperada - ' + JSON.stringify(userInfo));
+        return userInfo;
+      }
+    }
+
+    Logger.log('getUserInfo: Usuario no encontrado - ' + email);
+    return null;
+  } catch (error) {
+    Logger.log('Error en getUserInfo: ' + error);
+    console.error('Error en getUserInfo:', error);
+    throw error;
+  }
 }
 
 /**
@@ -148,9 +195,58 @@ function updateLastLogin(email) {
  */
 function hasRole(role) {
   try {
-    const authInfo = checkUserAuth();
-    return authInfo.isAuthenticated && authInfo.role === role;
+    const user = Session.getActiveUser();
+    if (!user || !user.getEmail()) {
+      Logger.log('hasRole: No hay usuario activo');
+      return false;
+    }
+
+    const email = user.getEmail();
+    Logger.log('hasRole: Verificando rol para usuario: ' + email);
+
+    // Obtener datos directamente de la hoja
+    const ss = getSystemSpreadsheet();
+    const usersSheet = ss.getSheetByName('Users');
+    
+    if (!usersSheet) {
+      Logger.log('hasRole: Hoja de usuarios no encontrada');
+      return false;
+    }
+
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    const emailCol = headers.indexOf('Email');
+    const roleCol = headers.indexOf('Rol');
+    const statusCol = headers.indexOf('Estado');
+
+    if (emailCol === -1 || roleCol === -1 || statusCol === -1) {
+      Logger.log('hasRole: Columnas requeridas no encontradas');
+      return false;
+    }
+
+    // Buscar el usuario
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][emailCol] === email) {
+        const userRole = data[i][roleCol];
+        const userStatus = data[i][statusCol];
+        
+        Logger.log('hasRole: Usuario encontrado - Role=' + userRole + ', Status=' + userStatus);
+        
+        // Verificar si el usuario está activo y tiene el rol correcto
+        if (userStatus === 'Activo' && userRole === role) {
+          Logger.log('hasRole: Usuario tiene el rol requerido y está activo');
+          return true;
+        } else {
+          Logger.log('hasRole: Usuario no cumple los requisitos - Role=' + userRole + ', Status=' + userStatus + ', RoleRequerido=' + role);
+          return false;
+        }
+      }
+    }
+
+    Logger.log('hasRole: Usuario no encontrado en la hoja');
+    return false;
   } catch (error) {
+    Logger.log('Error en hasRole: ' + error);
     console.error('Error en hasRole:', error);
     return false;
   }
@@ -387,22 +483,72 @@ function getCurrentUser() {
  * Obtiene todos los usuarios del sistema
  */
 function getUsers() {
-  if (!hasRole(ROLES.ADMIN)) {
-    throw new Error('No tienes permisos para ver la lista de usuarios');
+  try {
+    const user = Session.getActiveUser();
+    if (!user || !user.getEmail()) {
+      Logger.log('getUsers: No hay usuario activo');
+      return null;
+    }
+
+    const email = user.getEmail();
+    Logger.log('getUsers: Usuario activo: ' + email);
+    
+    // Obtener datos directamente de la hoja
+    const ss = getSystemSpreadsheet();
+    const usersSheet = ss.getSheetByName('Users');
+    
+    if (!usersSheet) {
+      Logger.log('getUsers: La hoja "Users" no existe.');
+      return null;
+    }
+    
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    const emailCol = headers.indexOf('Email');
+    const nameCol = headers.indexOf('Nombre');
+    const roleCol = headers.indexOf('Rol');
+    const statusCol = headers.indexOf('Estado');
+    const lastLoginCol = headers.indexOf('Última Conexión');
+
+    // Verificar columnas requeridas
+    if (emailCol === -1 || nameCol === -1 || roleCol === -1 || statusCol === -1) {
+      Logger.log('getUsers: Faltan columnas requeridas');
+      return null;
+    }
+
+    // Verificar si el usuario actual es administrador
+    let isAdmin = false;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][emailCol] === email && 
+          data[i][statusCol] === 'Activo' && 
+          data[i][roleCol] === ROLES.ADMIN) {
+        isAdmin = true;
+        break;
+      }
+    }
+
+    if (!isAdmin) {
+      Logger.log('getUsers: Usuario no es administrador o no está activo');
+      return null;
+    }
+
+    // Si es administrador, retornar todos los usuarios
+    const users = data.slice(1).map(row => ({
+      email: row[emailCol] || '',
+      name: row[nameCol] || '',
+      role: row[roleCol] || '',
+      status: row[statusCol] || '',
+      lastLogin: row[lastLoginCol] ? new Date(row[lastLoginCol]).toISOString() : null
+    }));
+
+    Logger.log('getUsers: Retornando ' + users.length + ' usuarios');
+    return users;
+
+  } catch (error) {
+    Logger.log('getUsers: Error inesperado: ' + error);
+    console.error('Error en getUsers:', error);
+    return null;
   }
-  
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const usersSheet = ss.getSheetByName('Users');
-  const data = usersSheet.getDataRange().getValues();
-  
-  // Excluir la fila de encabezados
-  return data.slice(1).map(row => ({
-    email: row[0],
-    name: row[1],
-    role: row[2],
-    status: row[3],
-    lastLogin: row[4]
-  }));
 }
 
 /**
@@ -413,7 +559,7 @@ function getUserByEmail(email) {
     throw new Error('No tienes permisos para ver información de usuarios');
   }
   
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSystemSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
   const data = usersSheet.getDataRange().getValues();
   const userRow = data.find(row => row[0] === email);
@@ -438,25 +584,31 @@ function addUser(userData) {
   if (!hasRole(ROLES.ADMIN)) {
     throw new Error('No tienes permisos para agregar usuarios');
   }
-  
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Validación de campos obligatorios
+  if (!userData.email || !userData.name || !userData.role || !userData.status) {
+    throw new Error('Todos los campos (email, nombre, rol, estado) son obligatorios');
+  }
+
+  const ss = getSystemSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
-  
+
   // Verificar si el email ya existe
   const existingUser = usersSheet.getDataRange()
     .getValues()
     .find(row => row[0] === userData.email);
-    
+
   if (existingUser) {
     throw new Error('Ya existe un usuario con ese email');
   }
-  
+
   usersSheet.appendRow([
     userData.email,
     userData.name,
     userData.role,
     userData.status,
-    new Date()
+    new Date(),
+    '' // Contraseña vacía por defecto
   ]);
 }
 
@@ -468,7 +620,7 @@ function updateUser(userData) {
     throw new Error('No tienes permisos para modificar usuarios');
   }
   
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSystemSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
   const data = usersSheet.getDataRange().getValues();
   const userRowIndex = data.findIndex(row => row[0] === userData.email);
@@ -477,15 +629,17 @@ function updateUser(userData) {
     throw new Error('Usuario no encontrado');
   }
   
-  // Mantener la última conexión sin cambios
+  // Mantener la última conexión y contraseña sin cambios
   const lastLogin = data[userRowIndex][4];
+  const password = data[userRowIndex][5];
   
-  usersSheet.getRange(userRowIndex + 1, 1, 1, 5).setValues([[
+  usersSheet.getRange(userRowIndex + 1, 1, 1, 6).setValues([[
     userData.email,
     userData.name,
     userData.role,
     userData.status,
-    lastLogin
+    lastLogin,
+    password
   ]]);
 }
 
@@ -497,7 +651,7 @@ function deleteUser(email) {
     throw new Error('No tienes permisos para eliminar usuarios');
   }
   
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSystemSpreadsheet();
   const usersSheet = ss.getSheetByName('Users');
   const data = usersSheet.getDataRange().getValues();
   const userRowIndex = data.findIndex(row => row[0] === email);
@@ -756,4 +910,77 @@ function resetAllPasswordsToDefault() {
     success: true,
     message: 'Todas las contraseñas han sido restablecidas a "123456"'
   };
-} 
+}
+
+/**
+ * Obtiene la lista de roles desde la hoja 'Roles'
+ */
+function getRoles() {
+  var ss = getSystemSpreadsheet();
+  var rolesSheet = ss.getSheetByName('Roles');
+  if (!rolesSheet) {
+    return [];
+  }
+  var data = rolesSheet.getRange(1, 1, rolesSheet.getLastRow(), 1).getValues();
+  // Filtrar vacíos y devolver como array plano
+  return data.map(function(row) { return row[0]; }).filter(function(role) { return role && role.toString().trim() !== ''; });
+}
+
+/**
+ * Inicializa la hoja de roles si no existe
+ */
+function initializeRolesSheet() {
+  var ss = getSystemSpreadsheet();
+  var rolesSheet = ss.getSheetByName('Roles');
+  if (!rolesSheet) {
+    rolesSheet = ss.insertSheet('Roles');
+    rolesSheet.getRange('A1:A3').setValues([
+      ['Administrador'],
+      ['Supervisor'],
+      ['Operador']
+    ]);
+    rolesSheet.getRange('A1:A3').setFontWeight('bold');
+  }
+  return true;
+}
+
+/**
+ * Función de diagnóstico para verificar el estado del usuario
+ */
+function diagnosticUserStatus() {
+  try {
+    const user = Session.getActiveUser();
+    const email = user ? user.getEmail() : 'N/A';
+    
+    Logger.log('=== DIAGNÓSTICO DE USUARIO ===');
+    Logger.log('Usuario activo: ' + email);
+    
+    // Verificar si el usuario existe
+    const userInfo = getUserInfo(email);
+    Logger.log('Información del usuario: ' + JSON.stringify(userInfo));
+    
+    // Verificar rol de administrador
+    const isAdmin = hasRole(ROLES.ADMIN);
+    Logger.log('¿Es administrador?: ' + isAdmin);
+    
+    // Verificar estado de autenticación
+    const authStatus = checkUserAuth();
+    Logger.log('Estado de autenticación: ' + JSON.stringify(authStatus));
+    
+    return {
+      email: email,
+      userInfo: userInfo,
+      isAdmin: isAdmin,
+      authStatus: authStatus
+    };
+  } catch (error) {
+    Logger.log('Error en diagnóstico: ' + error);
+    return {
+      error: error.message,
+      stack: error.stack
+    };
+  }
+}
+
+// Para depuración: mostrar la salida de getUsers en los logs
+Logger.log(getUsers()); 

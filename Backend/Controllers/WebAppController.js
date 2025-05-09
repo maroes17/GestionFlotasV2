@@ -118,7 +118,7 @@ function getLoginHTML() {
     console.error('Error en getLoginHTML:', error);
     throw new Error('Error al cargar la página de login: ' + error.message);
   }
-}
+} 
 
 /**
  * Maneja el cierre de sesión del usuario

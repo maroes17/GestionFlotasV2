@@ -64,6 +64,7 @@ function showAddUserModal() {
   editingUserId = null;
   $('#modalTitle').text('Nuevo Usuario');
   $('#userForm')[0].reset();
+  cargarRolesEnSelect();
   $('#userModal').modal('show');
 }
 
@@ -75,12 +76,36 @@ function editUser(email) {
       $('#modalTitle').text('Editar Usuario');
       $('#email').val(user.email);
       $('#name').val(user.name);
-      $('#role').val(user.role);
+      cargarRolesEnSelect(user.role);
       $('#status').val(user.status);
       $('#userModal').modal('show');
     })
     .withFailureHandler(showError)
     .getUserByEmail(email);
+}
+
+// Cargar roles dinámicamente en el select
+function cargarRolesEnSelect(selectedRole) {
+  var $roleSelect = $('#role');
+  $roleSelect.prop('disabled', true).html('<option>Cargando...</option>');
+  google.script.run
+    .withSuccessHandler(function(roles) {
+      if (!roles || !roles.length) {
+        $roleSelect.html('<option value="">No hay roles disponibles</option>');
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No hay roles configurados en la hoja "Roles".' });
+        return;
+      }
+      var options = roles.map(function(role) {
+        var selected = (role === selectedRole) ? 'selected' : '';
+        return '<option value="' + role + '" ' + selected + '>' + role + '</option>';
+      });
+      $roleSelect.html(options.join('')).prop('disabled', false);
+    })
+    .withFailureHandler(function(error) {
+      $roleSelect.html('<option value="">Error al cargar roles</option>').prop('disabled', true);
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los roles: ' + (error.message || 'Error desconocido') });
+    })
+    .getRoles();
 }
 
 // Guardar usuario (crear o actualizar)
@@ -95,7 +120,6 @@ function saveUser() {
   if (!validateUserData(userData)) return;
 
   const operation = editingUserId ? 'updateUser' : 'addUser';
-  
   Swal.fire({
     title: 'Guardando...',
     didOpen: function() {
@@ -111,7 +135,9 @@ function saveUser() {
           $('#userModal').modal('hide');
           loadUsers();
         })
-        .withFailureHandler(showError)
+        .withFailureHandler(function(error) {
+          Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo guardar el usuario' });
+        })
         [operation](userData);
     }
   });
@@ -161,6 +187,15 @@ function validateUserData(userData) {
       icon: 'error',
       title: 'Error de validación',
       text: 'El email no es válido'
+    });
+    return false;
+  }
+  
+  if ($('#role').prop('disabled')) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error de validación',
+      text: 'Debe seleccionar un rol válido.'
     });
     return false;
   }
