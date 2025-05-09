@@ -1,26 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Gestión de Flota</title>
   
-  <!-- CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+  <!-- DataTables CSS -->
   <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <?!= include('Frontend/css/dashboard'); ?>
   
-  <!-- JavaScript: jQuery y DataTables primero -->
+  <style>
+    /* Estilos base */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      overflow-x: hidden;
+    }
+    
+    /* Wrapper */
+    .wrapper {
+      display: flex;
+      width: 100%;
+      align-items: stretch;
+      min-height: 100vh;
+    }
+
+    /* Loading Indicator */
+    #loadingIndicator {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 9999;
+      display: none;
+    }
+
+    .loading-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: white;
+    }
+  </style>
+
+  <!-- Custom CSS -->
+  <?!= include('Frontend/css/dashboard'); ?>
+  <?!= include('Frontend/css/userManagement'); ?>
+  
+  <!-- JavaScript Libraries -->
   <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
-  <!-- Scripts personalizados SIEMPRE al final del head -->
+  <!-- Custom JavaScript -->
   <?!= include('Frontend/js/dashboard'); ?>
 </head>
 <body>
@@ -40,7 +83,7 @@
       <div class="sidebar-content">
         <div class="user-info">
           <div class="user-avatar">
-            <i class="fas fa-user-circle"></i>
+            <i class="fas fa-user-circle fa-2x"></i>
           </div>
           <div class="user-details">
             <span id="userName">Cargando...</span>
@@ -51,7 +94,7 @@
         <ul class="nav-menu">
           <li class="menu-header">Principal</li>
           <li class="nav-item active">
-            <a role="button" data-module="dashboard">
+            <a href="#" data-module="dashboard">
               <i class="fas fa-home"></i>
               <span>Dashboard</span>
             </a>
@@ -59,19 +102,19 @@
 
           <li class="menu-header">Gestión de Flota</li>
           <li class="nav-item">
-            <a role="button" data-module="vehicles">
+            <a href="#" data-module="vehicles">
               <i class="fas fa-truck"></i>
               <span>Vehículos</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="trailers">
+            <a href="#" data-module="trailers">
               <i class="fas fa-trailer"></i>
               <span>Semirremolques</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="drivers">
+            <a href="#" data-module="drivers">
               <i class="fas fa-id-card"></i>
               <span>Choferes</span>
             </a>
@@ -79,19 +122,19 @@
 
           <li class="menu-header">Operaciones</li>
           <li class="nav-item">
-            <a role="button" data-module="trips">
+            <a href="#" data-module="trips">
               <i class="fas fa-route"></i>
               <span>Viajes</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="expenses">
+            <a href="#" data-module="expenses">
               <i class="fas fa-money-bill"></i>
               <span>Gastos/Anticipos</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="incidents">
+            <a href="#" data-module="incidents">
               <i class="fas fa-exclamation-triangle"></i>
               <span>Incidentes</span>
             </a>
@@ -99,25 +142,25 @@
 
           <li class="menu-header">Administración</li>
           <li class="nav-item">
-            <a role="button" data-module="insurance">
+            <a href="#" data-module="insurance">
               <i class="fas fa-file-contract"></i>
               <span>Pólizas</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="maintenance">
+            <a href="#" data-module="maintenance">
               <i class="fas fa-tools"></i>
               <span>Mantenimiento</span>
             </a>
           </li>
           <li class="nav-item">
-            <a role="button" data-module="clients">
+            <a href="#" data-module="clients">
               <i class="fas fa-users"></i>
               <span>Clientes</span>
             </a>
           </li>
           <li class="nav-item admin-only" style="display: none;">
-            <a role="button" data-module="users">
+            <a href="#" data-module="users">
               <i class="fas fa-user-cog"></i>
               <span>Usuarios</span>
             </a>
@@ -130,7 +173,7 @@
     <div id="content">
       <!-- Navbar -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white">
-        <div class="container-fluid">
+        <div class="container-fluid px-3">
           <button type="button" id="sidebarCollapseTop" class="btn btn-link d-md-none">
             <i class="fas fa-bars"></i>
           </button>
@@ -146,10 +189,10 @@
                 <i class="fas fa-user-circle"></i>
               </button>
               <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" role="button" onclick="showProfileModal()"><i class="fas fa-user me-2"></i>Perfil</a></li>
-                <li><a class="dropdown-item" role="button" onclick="showSettingsModal()"><i class="fas fa-cog me-2"></i>Configuración</a></li>
+                <li><a class="dropdown-item" href="#" onclick="showProfileModal()"><i class="fas fa-user me-2"></i>Perfil</a></li>
+                <li><a class="dropdown-item" href="#" onclick="showSettingsModal()"><i class="fas fa-cog me-2"></i>Configuración</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" role="button" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
+                <li><a class="dropdown-item" href="#" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
               </ul>
             </div>
           </div>
@@ -158,193 +201,17 @@
 
       <!-- Main Content Area -->
       <div id="content-area" class="container-fluid">
-        <!-- Dashboard Content -->
-        <div class="dashboard-container">
-        <div class="row mb-4">
-          <!-- KPI Cards -->
-          <div class="col-md-3 mb-4">
-            <div class="card bg-primary text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Vehículos Activos</h6>
-                    <h2 class="mb-0" id="activeVehicles">--</h2>
-                  </div>
-                  <i class="fas fa-truck fa-2x opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-success text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Viajes en Curso</h6>
-                    <h2 class="mb-0" id="activeTrips">--</h2>
-                  </div>
-                  <i class="fas fa-route fa-2x opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-warning text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Mant. Pendientes</h6>
-                    <h2 class="mb-0" id="pendingMaintenance">--</h2>
-                  </div>
-                  <i class="fas fa-tools fa-2x opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-danger text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Pólizas por Vencer</h6>
-                    <h2 class="mb-0" id="expiringPolicies">--</h2>
-                  </div>
-                  <i class="fas fa-file-contract fa-2x opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Charts Row -->
-        <div class="row mb-4">
-          <div class="col-md-6">
-            <div class="card chart-card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Viajes por Mes</h5>
-              </div>
-              <div class="card-body">
-                <div class="chart-wrapper">
-                  <div id="tripsChartContainer" class="chart-container">
-                    <canvas id="tripsChart"></canvas>
-                    <div class="chart-placeholder" style="display: none;">
-                      <i class="fas fa-chart-line"></i>
-                      <p>No hay datos disponibles</p>
-                    </div>
-                    <div class="chart-error" style="display: none;">
-                      <i class="fas fa-exclamation-circle"></i>
-                      <p>Error al cargar el gráfico</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card chart-card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Distribución de Gastos</h5>
-              </div>
-              <div class="card-body">
-                <div class="chart-wrapper">
-                  <div id="expensesChartContainer" class="chart-container">
-                    <canvas id="expensesChart"></canvas>
-                    <div class="chart-placeholder" style="display: none;">
-                      <i class="fas fa-chart-pie"></i>
-                      <p>No hay datos disponibles</p>
-                    </div>
-                    <div class="chart-error" style="display: none;">
-                      <i class="fas fa-exclamation-circle"></i>
-                      <p>Error al cargar el gráfico</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Activity -->
-        <div class="row">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Actividad Reciente</h5>
-              </div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th>Descripción</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody id="recentActivity">
-                      <!-- La actividad reciente se cargará dinámicamente -->
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Indicador de carga (fallback) -->
-      <div id="loadingIndicator" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 9999;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white;">
-          <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;"></div>
-          <p class="mt-3">Cargando...</p>
-        </div>
+        <!-- El contenido dinámico se cargará aquí -->
       </div>
     </div>
   </div>
 
-  <!-- Script adicional para manejar la navegación del menú -->
-  <script>
-    // Script de inicialización para asegurar que los enlaces funcionen correctamente
-    document.addEventListener('DOMContentLoaded', function() {
-      // Capturar todos los enlaces del menú lateral
-      document.querySelectorAll('.nav-item a').forEach(function(link) {
-        link.addEventListener('click', function(e) {
-          // Prevenir comportamiento por defecto
-          e.preventDefault();
-          e.stopPropagation();
-          
-          // Obtener el módulo a mostrar
-          var module = this.getAttribute('data-module');
-          
-          // Marcar como activo
-          document.querySelectorAll('.nav-item').forEach(function(item) {
-            item.classList.remove('active');
-          });
-          this.parentNode.classList.add('active');
-          
-          // Llamar a la función showModule
-          if (typeof showModule === 'function') {
-            var contentArea = document.getElementById('content-area');
-            if (contentArea) {
-              // Efecto simple de transición
-              contentArea.style.opacity = '0.5';
-              setTimeout(function() {
-                showModule(module);
-                contentArea.style.opacity = '1';
-              }, 200);
-            } else {
-              showModule(module);
-            }
-          } else {
-            console.error('La función showModule no está definida');
-          }
-          
-          return false;
-        });
-      });
-    });
-  </script>
+  <!-- Loading Indicator -->
+  <div id="loadingIndicator">
+    <div class="loading-content">
+      <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;"></div>
+      <p class="mt-3">Cargando...</p>
+    </div>
+  </div>
 </body>
 </html> 
