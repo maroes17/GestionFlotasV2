@@ -40,37 +40,21 @@ function setupNavigationEvents() {
       event.preventDefault();
       event.stopPropagation();
     }
-    
     var $link = $(this);
     var module = $link.data('module');
-    
     // No hacer nada si estamos en el mismo módulo
     if (localStorage.getItem('currentModule') === module) {
       return false;
     }
-    
     // Actualizar las clases activas
     $('.nav-item').removeClass('active');
     $link.parent().addClass('active');
-    
-    // Transición con fade
-    $('#content-area').fadeOut(200, function() {
-      try {
-        // Cargar el módulo seleccionado
-        showModule(module);
-        $(this).fadeIn(200);
-      } catch (error) {
-        console.error('Error al cargar el módulo ' + module + ':', error);
-        $(this).fadeIn(200);
-        showError({message: 'Error al cargar el módulo: ' + error.message});
-      }
-    });
-    
+    // Transición instantánea y profesional: sin fadeOut/fadeIn
+    showModule(module);
     // En dispositivos móviles, colapsar el sidebar
     if ($(window).width() <= 768) {
       $('#sidebar').addClass('active');
     }
-    
     return false;
   });
 }
@@ -387,9 +371,9 @@ function getStatusClass(status) {
 // Mostrar/ocultar indicador de carga
 function showLoading(show) {
   if (show) {
-    $('main').addClass('loading');
+    $('#loadingIndicator').show();
   } else {
-    $('main').removeClass('loading');
+    $('#loadingIndicator').hide();
   }
 }
 
@@ -419,22 +403,22 @@ function refreshData(e) {
 // Mostrar módulo específico
 function showModule(moduleName) {
   try {
+    // Siempre ocultar el overlay de carga al cambiar de módulo
+    showLoading(false);
     // Guardar el módulo actual en el estado
     localStorage.setItem('currentModule', moduleName);
-    
     // Actualizar título de la página
     updatePageTitle(moduleName);
-    
     // Obtener el contenedor principal
     var contentArea = $('#content-area');
-    
-    // Limpiar el contenido actual si no es el dashboard
+    // Eliminar cualquier contenido previo que no sea el dashboard
+    contentArea.children().not('.dashboard-container').remove();
     if (moduleName !== 'dashboard') {
-      // Preservar solo el dashboard y ocultar
-      contentArea.children().not('.dashboard-container').remove();
+      // Ocultar el dashboard
       contentArea.children('.dashboard-container').hide();
     } else {
-      // Si es dashboard, mostrar su contenido
+      // Si es dashboard, mostrar solo el dashboard y limpiar residuos
+      contentArea.children().not('.dashboard-container').remove();
       contentArea.children('.dashboard-container').show();
     }
     
