@@ -118,4 +118,20 @@ function getLoginHTML() {
     console.error('Error en getLoginHTML:', error);
     throw new Error('Error al cargar la página de login: ' + error.message);
   }
+}
+
+/**
+ * Maneja el cierre de sesión del usuario
+ */
+function doLogout() {
+  try {
+    // No hay una función directa para cerrar sesión en GAS
+    // pero podemos limpiar variables de sesión si las usamos
+    
+    // Indicar éxito
+    return true;
+  } catch (error) {
+    console.error('Error en doLogout:', error);
+    return false;
+  }
 } 

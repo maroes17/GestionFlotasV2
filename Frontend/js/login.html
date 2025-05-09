@@ -1,7 +1,7 @@
 <script>
 // Estado global de autenticación
-let isAuthenticating = false;
-let authenticationRequired = true; // Forzar siempre autenticación
+var isAuthenticating = false;
+var authenticationRequired = true; // Forzar siempre autenticación
 
 // Inicialización cuando el documento está listo
 $(document).ready(function() {
@@ -118,7 +118,7 @@ function handleAuthError(error) {
   });
   
   $('.login-box').addClass('error-shake');
-  setTimeout(() => $('.login-box').removeClass('error-shake'), 500);
+  setTimeout(function() { $('.login-box').removeClass('error-shake'); }, 500);
 }
 
 // Mostrar mensaje de éxito y cargar dashboard
@@ -131,7 +131,7 @@ function showSuccessAndLoadDashboard(userData) {
     text: 'Iniciando sesión...',
     timer: 1500,
     showConfirmButton: false
-  }).then(() => {
+  }).then(function() {
     loadDashboard();
   });
 }
@@ -155,7 +155,7 @@ function loadDashboard() {
         title: 'Error',
         text: 'No se pudo cargar el dashboard: ' + (error.message || 'Error desconocido'),
         confirmButtonText: 'Reintentar'
-      }).then(() => {
+      }).then(function() {
         window.location.reload();
       });
     })

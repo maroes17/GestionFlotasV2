@@ -1,6 +1,6 @@
 <script>
-let usersTable;
-let editingUserId = null;
+var usersTable;
+var editingUserId = null;
 
 // Inicialización cuando el documento está listo
 $(document).ready(function() {
@@ -21,7 +21,7 @@ function initializeDataTable() {
       { 
         data: 'status',
         render: function(data) {
-          const statusClass = data === 'Activo' ? 'status-active' : 'status-inactive';
+          var statusClass = data === 'Activo' ? 'status-active' : 'status-inactive';
           return `<span class="status-badge ${statusClass}">${data}</span>`;
         }
       },
@@ -98,7 +98,7 @@ function saveUser() {
   
   Swal.fire({
     title: 'Guardando...',
-    didOpen: () => {
+    didOpen: function() {
       Swal.showLoading();
       google.script.run
         .withSuccessHandler(function() {
@@ -128,7 +128,7 @@ function deleteUser(email) {
     cancelButtonColor: '#3085d6',
     confirmButtonText: 'Sí, eliminar',
     cancelButtonText: 'Cancelar'
-  }).then((result) => {
+  }).then(function(result) {
     if (result.isConfirmed) {
       google.script.run
         .withSuccessHandler(function() {

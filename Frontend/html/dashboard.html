@@ -13,6 +13,34 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
+  <!-- Estilos adicionales para mejorar la navegación -->
+  <style>
+    /* Estilos para los enlaces de navegación */
+    .nav-menu a[role="button"] {
+      cursor: pointer;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      color: inherit;
+      transition: all 0.3s ease;
+    }
+    
+    .nav-menu a[role="button"]:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .dropdown-item[role="button"] {
+      cursor: pointer;
+    }
+    
+    /* Mejorar accesibilidad con focus visible */
+    a[role="button"]:focus {
+      outline: none;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+  </style>
+  
   <?!= include('Frontend/css/dashboard'); ?>
 </head>
 <body>
@@ -22,7 +50,7 @@
       <div class="sidebar-header">
         <div class="logo-container">
           <i class="fas fa-truck"></i>
-          <span class="logo-text">Sistema de Flota</span>
+          <span id="systemTitle" class="logo-text">Sistema de Gestión de Flota</span>
         </div>
         <button type="button" id="sidebarCollapse" class="btn">
           <i class="fas fa-bars"></i>
@@ -43,7 +71,7 @@
         <ul class="nav-menu">
           <li class="menu-header">Principal</li>
           <li class="nav-item active">
-            <a href="#" data-module="dashboard">
+            <a role="button" data-module="dashboard">
               <i class="fas fa-home"></i>
               <span>Dashboard</span>
             </a>
@@ -51,19 +79,19 @@
 
           <li class="menu-header">Gestión de Flota</li>
           <li class="nav-item">
-            <a href="#" data-module="vehicles">
+            <a role="button" data-module="vehicles">
               <i class="fas fa-truck"></i>
               <span>Vehículos</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="trailers">
+            <a role="button" data-module="trailers">
               <i class="fas fa-trailer"></i>
               <span>Semirremolques</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="drivers">
+            <a role="button" data-module="drivers">
               <i class="fas fa-id-card"></i>
               <span>Choferes</span>
             </a>
@@ -71,19 +99,19 @@
 
           <li class="menu-header">Operaciones</li>
           <li class="nav-item">
-            <a href="#" data-module="trips">
+            <a role="button" data-module="trips">
               <i class="fas fa-route"></i>
               <span>Viajes</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="expenses">
+            <a role="button" data-module="expenses">
               <i class="fas fa-money-bill"></i>
               <span>Gastos/Anticipos</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="incidents">
+            <a role="button" data-module="incidents">
               <i class="fas fa-exclamation-triangle"></i>
               <span>Incidentes</span>
             </a>
@@ -91,25 +119,25 @@
 
           <li class="menu-header">Administración</li>
           <li class="nav-item">
-            <a href="#" data-module="insurance">
+            <a role="button" data-module="insurance">
               <i class="fas fa-file-contract"></i>
               <span>Pólizas</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="maintenance">
+            <a role="button" data-module="maintenance">
               <i class="fas fa-tools"></i>
               <span>Mantenimiento</span>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" data-module="clients">
+            <a role="button" data-module="clients">
               <i class="fas fa-users"></i>
               <span>Clientes</span>
             </a>
           </li>
           <li class="nav-item admin-only" style="display: none;">
-            <a href="#" data-module="users">
+            <a role="button" data-module="users">
               <i class="fas fa-user-cog"></i>
               <span>Usuarios</span>
             </a>
@@ -130,7 +158,7 @@
           <h1 id="pageTitle" class="h3 mb-0">Dashboard</h1>
           
           <div class="ms-auto d-flex align-items-center">
-            <button class="btn btn-primary btn-sm me-3" onclick="refreshData()">
+            <button type="button" class="btn btn-primary btn-sm me-3" onclick="refreshData(event)">
               <i class="fas fa-sync-alt"></i> Actualizar
             </button>
             <div class="dropdown">
@@ -138,10 +166,10 @@
                 <i class="fas fa-user-circle"></i>
               </button>
               <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>Perfil</a></li>
-                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Configuración</a></li>
+                <li><a class="dropdown-item" role="button" onclick="showProfileModal()"><i class="fas fa-user me-2"></i>Perfil</a></li>
+                <li><a class="dropdown-item" role="button" onclick="showSettingsModal()"><i class="fas fa-cog me-2"></i>Configuración</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="#" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
+                <li><a class="dropdown-item" role="button" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
               </ul>
             </div>
           </div>
@@ -151,136 +179,146 @@
       <!-- Main Content Area -->
       <div id="content-area" class="container-fluid">
         <!-- Dashboard Content -->
-        <div class="row mb-4">
-          <!-- KPI Cards -->
-          <div class="col-md-3 mb-4">
-            <div class="card bg-primary text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Vehículos Activos</h6>
-                    <h2 class="mb-0" id="activeVehicles">--</h2>
+        <div class="dashboard-container">
+          <div class="row mb-4">
+            <!-- KPI Cards -->
+            <div class="col-md-3 mb-4">
+              <div class="card bg-primary text-white h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 class="text-uppercase mb-0">Vehículos Activos</h6>
+                      <h2 class="mb-0" id="activeVehicles">--</h2>
+                    </div>
+                    <i class="fas fa-truck fa-2x opacity-50"></i>
                   </div>
-                  <i class="fas fa-truck fa-2x opacity-50"></i>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3 mb-4">
+              <div class="card bg-success text-white h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 class="text-uppercase mb-0">Viajes en Curso</h6>
+                      <h2 class="mb-0" id="activeTrips">--</h2>
+                    </div>
+                    <i class="fas fa-route fa-2x opacity-50"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3 mb-4">
+              <div class="card bg-warning text-white h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 class="text-uppercase mb-0">Mant. Pendientes</h6>
+                      <h2 class="mb-0" id="pendingMaintenance">--</h2>
+                    </div>
+                    <i class="fas fa-tools fa-2x opacity-50"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3 mb-4">
+              <div class="card bg-danger text-white h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 class="text-uppercase mb-0">Pólizas por Vencer</h6>
+                      <h2 class="mb-0" id="expiringPolicies">--</h2>
+                    </div>
+                    <i class="fas fa-file-contract fa-2x opacity-50"></i>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-success text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Viajes en Curso</h6>
-                    <h2 class="mb-0" id="activeTrips">--</h2>
+
+          <!-- Charts Row -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <div class="card chart-card">
+                <div class="card-header">
+                  <h5 class="card-title mb-0">Viajes por Mes</h5>
+                </div>
+                <div class="card-body">
+                  <div class="chart-wrapper">
+                    <div id="tripsChartContainer" class="chart-container">
+                      <canvas id="tripsChart"></canvas>
+                      <div class="chart-placeholder" style="display: none;">
+                        <i class="fas fa-chart-line"></i>
+                        <p>No hay datos disponibles</p>
+                      </div>
+                      <div class="chart-error" style="display: none;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>Error al cargar el gráfico</p>
+                      </div>
+                    </div>
                   </div>
-                  <i class="fas fa-route fa-2x opacity-50"></i>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card chart-card">
+                <div class="card-header">
+                  <h5 class="card-title mb-0">Distribución de Gastos</h5>
+                </div>
+                <div class="card-body">
+                  <div class="chart-wrapper">
+                    <div id="expensesChartContainer" class="chart-container">
+                      <canvas id="expensesChart"></canvas>
+                      <div class="chart-placeholder" style="display: none;">
+                        <i class="fas fa-chart-pie"></i>
+                        <p>No hay datos disponibles</p>
+                      </div>
+                      <div class="chart-error" style="display: none;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>Error al cargar el gráfico</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-warning text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Mant. Pendientes</h6>
-                    <h2 class="mb-0" id="pendingMaintenance">--</h2>
-                  </div>
-                  <i class="fas fa-tools fa-2x opacity-50"></i>
+
+          <!-- Recent Activity -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header">
+                  <h5 class="card-title mb-0">Actividad Reciente</h5>
                 </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3 mb-4">
-            <div class="card bg-danger text-white h-100">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="text-uppercase mb-0">Pólizas por Vencer</h6>
-                    <h2 class="mb-0" id="expiringPolicies">--</h2>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Tipo</th>
+                          <th>Descripción</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody id="recentActivity">
+                        <!-- La actividad reciente se cargará dinámicamente -->
+                      </tbody>
+                    </table>
                   </div>
-                  <i class="fas fa-file-contract fa-2x opacity-50"></i>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Charts Row -->
-        <div class="row mb-4">
-          <div class="col-md-6">
-            <div class="card chart-card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Viajes por Mes</h5>
-              </div>
-              <div class="card-body">
-                <div class="chart-wrapper">
-                  <div id="tripsChartContainer" class="chart-container">
-                    <canvas id="tripsChart"></canvas>
-                    <div class="chart-placeholder" style="display: none;">
-                      <i class="fas fa-chart-line"></i>
-                      <p>No hay datos disponibles</p>
-                    </div>
-                    <div class="chart-error" style="display: none;">
-                      <i class="fas fa-exclamation-circle"></i>
-                      <p>Error al cargar el gráfico</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card chart-card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Distribución de Gastos</h5>
-              </div>
-              <div class="card-body">
-                <div class="chart-wrapper">
-                  <div id="expensesChartContainer" class="chart-container">
-                    <canvas id="expensesChart"></canvas>
-                    <div class="chart-placeholder" style="display: none;">
-                      <i class="fas fa-chart-pie"></i>
-                      <p>No hay datos disponibles</p>
-                    </div>
-                    <div class="chart-error" style="display: none;">
-                      <i class="fas fa-exclamation-circle"></i>
-                      <p>Error al cargar el gráfico</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Activity -->
-        <div class="row">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-header">
-                <h5 class="card-title mb-0">Actividad Reciente</h5>
-              </div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th>Descripción</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody id="recentActivity">
-                      <!-- La actividad reciente se cargará dinámicamente -->
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
+      </div>
+      
+      <!-- Indicador de carga (fallback) -->
+      <div id="loadingIndicator" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 9999;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white;">
+          <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;"></div>
+          <p class="mt-3">Cargando...</p>
         </div>
       </div>
     </div>
@@ -292,5 +330,48 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   
   <?!= include('Frontend/js/dashboard'); ?>
+  
+  <!-- Script adicional para manejar la navegación del menú -->
+  <script>
+    // Script de inicialización para asegurar que los enlaces funcionen correctamente
+    document.addEventListener('DOMContentLoaded', function() {
+      // Capturar todos los enlaces del menú lateral
+      document.querySelectorAll('.nav-item a').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          // Prevenir comportamiento por defecto
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Obtener el módulo a mostrar
+          var module = this.getAttribute('data-module');
+          
+          // Marcar como activo
+          document.querySelectorAll('.nav-item').forEach(function(item) {
+            item.classList.remove('active');
+          });
+          this.parentNode.classList.add('active');
+          
+          // Llamar a la función showModule
+          if (typeof showModule === 'function') {
+            var contentArea = document.getElementById('content-area');
+            if (contentArea) {
+              // Efecto simple de transición
+              contentArea.style.opacity = '0.5';
+              setTimeout(function() {
+                showModule(module);
+                contentArea.style.opacity = '1';
+              }, 200);
+            } else {
+              showModule(module);
+            }
+          } else {
+            console.error('La función showModule no está definida');
+          }
+          
+          return false;
+        });
+      });
+    });
+  </script>
 </body>
 </html> 

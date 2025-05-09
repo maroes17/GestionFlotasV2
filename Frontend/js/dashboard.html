@@ -1,8 +1,8 @@
 <script>
-let tripsChart = null;
-let expensesChart = null;
-let lastUpdate = 0;
-const UPDATE_INTERVAL = 30000; // 30 segundos mínimo entre actualizaciones
+var tripsChart = null;
+var expensesChart = null;
+var lastUpdate = 0;
+var UPDATE_INTERVAL = 30000; // 30 segundos mínimo entre actualizaciones
 
 // Inicialización cuando el documento está listo
 $(document).ready(function() {
@@ -11,7 +11,7 @@ $(document).ready(function() {
   loadDashboardData();
 
   // Inicializar el estado del sidebar desde localStorage
-  const sidebarState = localStorage.getItem('sidebarState');
+  var sidebarState = localStorage.getItem('sidebarState');
   if (sidebarState === 'collapsed') {
     $('#sidebar').addClass('active');
   }
@@ -22,38 +22,68 @@ $(document).ready(function() {
     localStorage.setItem('sidebarState', $('#sidebar').hasClass('active') ? 'collapsed' : 'expanded');
   });
 
-  // Manejo de items del menú con debounce
-  $('.nav-item a').on('click', debounce(function(e) {
-    e.preventDefault();
+  // Manejo de eventos de navegación
+  setupNavigationEvents();
+  
+  // Detectar cambios de tamaño de ventana con throttle
+  $(window).on('resize', function() {
+    throttle(adjustLayout, 250)();
+  });
+});
+
+// Configurar eventos de navegación
+function setupNavigationEvents() {
+  // Capturar cada clic en un enlace del menú
+  $('.nav-item a').on('click', function(event) {
+    // Importante: prevenir el comportamiento por defecto del enlace
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     
+    var $link = $(this);
+    var module = $link.data('module');
+    
+    // No hacer nada si estamos en el mismo módulo
+    if (localStorage.getItem('currentModule') === module) {
+      return false;
+    }
+    
+    // Actualizar las clases activas
     $('.nav-item').removeClass('active');
-    $(this).parent().addClass('active');
+    $link.parent().addClass('active');
     
-    const module = $(this).data('module');
-    
+    // Transición con fade
     $('#content-area').fadeOut(200, function() {
-      showModule(module);
-      $(this).fadeIn(200);
+      try {
+        // Cargar el módulo seleccionado
+        showModule(module);
+        $(this).fadeIn(200);
+      } catch (error) {
+        console.error('Error al cargar el módulo ' + module + ':', error);
+        $(this).fadeIn(200);
+        showError({message: 'Error al cargar el módulo: ' + error.message});
+      }
     });
     
+    // En dispositivos móviles, colapsar el sidebar
     if ($(window).width() <= 768) {
-      $('#sidebar').removeClass('active');
+      $('#sidebar').addClass('active');
     }
-  }, 300));
-
-  // Detectar cambios de tamaño de ventana con throttle
-  $(window).on('resize', throttle(function() {
-    adjustLayout();
-  }, 250));
-});
+    
+    return false;
+  });
+}
 
 // Función debounce para evitar múltiples llamadas
 function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
+  var timeout;
+  return function() {
+    var context = this;
+    var args = arguments;
+    var later = function() {
+      timeout = null;
+      func.apply(context, args);
     };
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
@@ -62,12 +92,16 @@ function debounce(func, wait) {
 
 // Función throttle para limitar la frecuencia de llamadas
 function throttle(func, limit) {
-  let inThrottle;
-  return function(...args) {
+  var inThrottle;
+  return function() {
+    var context = this;
+    var args = arguments;
     if (!inThrottle) {
-      func.apply(this, args);
+      func.apply(context, args);
       inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
+      setTimeout(function() {
+        inThrottle = false;
+      }, limit);
     }
   };
 }
@@ -76,16 +110,43 @@ function throttle(func, limit) {
 function loadUserInfo() {
   google.script.run
     .withSuccessHandler(function(userInfo) {
-      $('#userInfo').html(`
-        <i class="fas fa-user"></i> ${userInfo.name} (${userInfo.role})
-      `);
+      // Actualizar los elementos en el sidebar
+      $('#userName').text(userInfo.name);
+      $('#userRole').text(userInfo.role);
+      
+      // Establecer variables globales para uso en otras partes del código
+      window.userName = userInfo.name;
+      window.userRole = userInfo.role;
+      window.userEmail = userInfo.email; // Guardar el email del usuario
+      
+      // También guardar en localStorage para persistencia
+      localStorage.setItem('userName', userInfo.name);
+      localStorage.setItem('userRole', userInfo.role);
+      localStorage.setItem('userEmail', userInfo.email);
       
       // Mostrar/ocultar opciones de administrador
       if (userInfo.role === 'Administrador') {
         $('.admin-only').show();
       }
     })
-    .withFailureHandler(showError)
+    .withFailureHandler(function(error) {
+      console.error('Error al cargar información del usuario:', error);
+      showError({message: 'No se pudo cargar la información del usuario'});
+      
+      // Intentar cargar desde localStorage como respaldo
+      if (localStorage.getItem('userName')) {
+        $('#userName').text(localStorage.getItem('userName'));
+        $('#userRole').text(localStorage.getItem('userRole'));
+        
+        window.userName = localStorage.getItem('userName');
+        window.userRole = localStorage.getItem('userRole');
+        window.userEmail = localStorage.getItem('userEmail');
+        
+        if (localStorage.getItem('userRole') === 'Administrador') {
+          $('.admin-only').show();
+        }
+      }
+    })
     .getCurrentUser();
 }
 
@@ -240,7 +301,7 @@ function loadDashboardData() {
         return;
       }
       
-      requestAnimationFrame(() => {
+      requestAnimationFrame(function() {
         updateKPIs(data.kpis);
         updateCharts(data.charts);
         updateRecentActivity(data.recentActivity || []);
@@ -306,16 +367,9 @@ function updateRecentActivity(activities) {
   const tbody = $('#recentActivity');
   tbody.empty();
 
-  activities.forEach(activity => {
-    const statusClass = getStatusClass(activity.status);
-    tbody.append(`
-      <tr>
-        <td>${new Date(activity.date).toLocaleString('es-AR')}</td>
-        <td>${activity.type}</td>
-        <td>${activity.description}</td>
-        <td><span class="status-badge ${statusClass}">${activity.status}</span></td>
-      </tr>
-    `);
+  activities.forEach(function(activity) {
+    var statusClass = getStatusClass(activity.status);
+    tbody.append('<tr><td>' + new Date(activity.date).toLocaleString('es-AR') + '</td><td>' + activity.type + '</td><td>' + activity.description + '</td><td><span class="status-badge ' + statusClass + '">' + activity.status + '</span></td></tr>');
   });
 }
 
@@ -340,7 +394,12 @@ function showLoading(show) {
 }
 
 // Refrescar datos con control de frecuencia
-function refreshData() {
+function refreshData(e) {
+  // Prevenir comportamiento por defecto si es un evento
+  if (e && e.preventDefault) {
+    e.preventDefault();
+  }
+  
   const now = Date.now();
   if (now - lastUpdate < UPDATE_INTERVAL) {
     Swal.fire({
@@ -353,41 +412,99 @@ function refreshData() {
     return;
   }
   loadDashboardData();
+  
+  return false;
 }
 
 // Mostrar módulo específico
 function showModule(moduleName) {
-  // Guardar el módulo actual en el estado
-  localStorage.setItem('currentModule', moduleName);
-  
-  // Actualizar título de la página
-  updatePageTitle(moduleName);
-  
-  // Mostrar contenido según el módulo
-  switch(moduleName) {
-    case 'dashboard':
-      loadDashboardData();
-      break;
-    case 'vehicles':
-    case 'trailers':
-    case 'drivers':
-    case 'trips':
-    case 'expenses':
-    case 'incidents':
-    case 'insurance':
-    case 'maintenance':
-    case 'clients':
-      showModuleUnderConstruction(moduleName);
-      break;
-    case 'users':
-      if (hasAdminRole()) {
-        loadUserManagement();
-      } else {
-        showUnauthorizedMessage();
-      }
-      break;
-    default:
-      showError('Módulo no encontrado');
+  try {
+    // Guardar el módulo actual en el estado
+    localStorage.setItem('currentModule', moduleName);
+    
+    // Actualizar título de la página
+    updatePageTitle(moduleName);
+    
+    // Obtener el contenedor principal
+    var contentArea = $('#content-area');
+    
+    // Limpiar el contenido actual si no es el dashboard
+    if (moduleName !== 'dashboard') {
+      // Preservar solo el dashboard y ocultar
+      contentArea.children().not('.dashboard-container').remove();
+      contentArea.children('.dashboard-container').hide();
+    } else {
+      // Si es dashboard, mostrar su contenido
+      contentArea.children('.dashboard-container').show();
+    }
+    
+    // Mostrar contenido según el módulo
+    switch(moduleName) {
+      case 'dashboard':
+        // Cargar datos del dashboard
+        if (typeof loadDashboardData === 'function') {
+          loadDashboardData();
+        } else {
+          console.error('Función loadDashboardData no definida');
+          showError({message: 'Error al cargar el dashboard'});
+        }
+        break;
+      case 'vehicles':
+      case 'trailers':
+      case 'drivers':
+      case 'trips':
+      case 'expenses':
+      case 'incidents':
+      case 'insurance':
+      case 'maintenance':
+      case 'clients':
+        // Para módulos en construcción, mostrar un mensaje temporal
+        if (typeof loadModuleTemplate === 'function') {
+          loadModuleTemplate(moduleName);
+        } else {
+          console.error('Función loadModuleTemplate no definida');
+          showModuleUnderConstruction(moduleName);
+        }
+        break;
+      case 'users':
+        if (hasAdminRole()) {
+          if (typeof loadUserManagement === 'function') {
+            loadUserManagement();
+          } else {
+            console.error('Función loadUserManagement no definida');
+            loadModuleTemplate('users');
+          }
+        } else {
+          if (typeof showUnauthorizedMessage === 'function') {
+            showUnauthorizedMessage();
+          } else {
+            showError({message: 'No tienes permisos para acceder a este módulo'});
+          }
+          // Volver a dashboard si no está autorizado
+          setTimeout(function() {
+            $('.nav-item a[data-module="dashboard"]').click();
+          }, 2000);
+        }
+        break;
+      default:
+        showError({message: 'Módulo no encontrado'});
+        // Volver a dashboard en caso de error
+        setTimeout(function() {
+          $('.nav-item a[data-module="dashboard"]').click();
+        }, 2000);
+    }
+  } catch (error) {
+    console.error('Error en showModule:', error);
+    showError({message: 'Error al cargar el módulo: ' + (error.message || 'Error desconocido')});
+    
+    // Intentar volver al dashboard en caso de error
+    try {
+      setTimeout(function() {
+        $('.nav-item a[data-module="dashboard"]').click();
+      }, 2000);
+    } catch (e) {
+      console.error('Error al intentar volver al dashboard:', e);
+    }
   }
 }
 
@@ -407,16 +524,38 @@ function updatePageTitle(moduleName) {
     users: 'Gestión de Usuarios'
   };
   
+  // Actualizar el título de la página en la barra superior
   $('#pageTitle').text(titles[moduleName] || 'Sistema de Gestión de Flota');
+  
+  // Actualizar el título del sistema en el sidebar
+  if (moduleName === 'dashboard') {
+    $('#systemTitle').text('Sistema de Gestión de Flota');
+  } else {
+    const moduleTitle = titles[moduleName] || getModuleTitle(moduleName);
+    $('#systemTitle').text('SGF - ' + moduleTitle);
+  }
 }
 
 // Mostrar mensaje de módulo en construcción
 function showModuleUnderConstruction(moduleName) {
+  // Verificar si ya se mostró la alerta para este módulo en esta sesión
+  const shownAlerts = JSON.parse(localStorage.getItem('shownModuleAlerts') || '{}');
+  
+  // Si ya se mostró la alerta para este módulo, no mostrarla de nuevo
+  if (shownAlerts[moduleName]) {
+    return;
+  }
+  
+  // Mostrar la alerta y registrar que ya se mostró
   Swal.fire({
     icon: 'info',
     title: 'Módulo en Desarrollo',
-    text: `El módulo de ${getModuleTitle(moduleName)} estará disponible próximamente.`,
+    text: 'El módulo de ' + getModuleTitle(moduleName) + ' estará disponible próximamente.',
     confirmButtonText: 'Entendido'
+  }).then(function() {
+    // Guardar que ya se mostró la alerta para este módulo
+    shownAlerts[moduleName] = true;
+    localStorage.setItem('shownModuleAlerts', JSON.stringify(shownAlerts));
   });
 }
 
@@ -439,7 +578,19 @@ function getModuleTitle(moduleName) {
 
 // Verificar rol de administrador
 function hasAdminRole() {
-  return userRole === 'Administrador';
+  // Verificar si la variable global está definida
+  if (typeof window.userRole !== 'undefined') {
+    return window.userRole === 'Administrador';
+  }
+  
+  // Intentar obtener desde localStorage como respaldo
+  const storedRole = localStorage.getItem('userRole');
+  if (storedRole) {
+    return storedRole === 'Administrador';
+  }
+  
+  // Si no hay información de rol, asumir que no es administrador por seguridad
+  return false;
 }
 
 // Mostrar mensaje de no autorizado
@@ -470,8 +621,13 @@ function adjustLayout() {
   }
 }
 
-// Cerrar sesión
-function logout() {
+// Cerrar sesión (con manejo del evento de clic)
+function logout(e) {
+  // Prevenir comportamiento por defecto
+  if (e && e.preventDefault) {
+    e.preventDefault();
+  }
+  
   // Mostrar confirmación
   Swal.fire({
     title: '¿Cerrar sesión?',
@@ -480,7 +636,7 @@ function logout() {
     showCancelButton: true,
     confirmButtonText: 'Sí, cerrar sesión',
     cancelButtonText: 'Cancelar'
-  }).then((result) => {
+  }).then(function(result) {
     if (result.isConfirmed) {
       // Mostrar indicador de carga
       Swal.fire({
@@ -488,7 +644,7 @@ function logout() {
         text: 'Por favor espera...',
         allowOutsideClick: false,
         allowEscapeKey: false,
-        didOpen: () => {
+        didOpen: function() {
           Swal.showLoading();
         }
       });
@@ -500,22 +656,449 @@ function logout() {
         localStorage.setItem('userEmail', savedEmail);
       }
       
-      // Obtener la URL base de la aplicación
+      // Intentar cerrar sesión usando el servidor
       google.script.run
-        .withSuccessHandler(function(url) {
-          // Redireccionar a la URL de la aplicación con el parámetro de logout
-          const logoutUrl = url + (url.includes('?') ? '&' : '?') + 'action=logout';
-          window.top.location.href = logoutUrl;
+        .withSuccessHandler(function(success) {
+          if (success) {
+            // Cuando el servidor confirma que el cierre de sesión fue exitoso
+            // usamos un formulario para redireccionar adecuadamente
+            redirectToLogout();
+          } else {
+            // Plan B: intentar obtener la URL y redireccionar manualmente
+            getLogoutUrl();
+          }
         })
         .withFailureHandler(function(error) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'No se pudo cerrar sesión: ' + (error.message || 'Error desconocido'),
-            confirmButtonText: 'Entendido'
-          });
+          console.error('Error en el servidor al cerrar sesión:', error);
+          // Si hay un error en el servidor, intentar el plan B
+          getLogoutUrl();
         })
-        .getScriptURL();
+        .doLogout(); // Esta función debe implementarse en el servidor
+    }
+  });
+  
+  return false;
+}
+
+/**
+ * Función auxiliar para obtener la URL de logout y redireccionar
+ */
+function getLogoutUrl() {
+  google.script.run
+    .withSuccessHandler(function(url) {
+      if (!url) {
+        showLogoutError('No se pudo obtener la URL de cierre de sesión');
+        return;
+      }
+      
+      // Construir la URL de logout
+      const logoutUrl = url + (url.includes('?') ? '&' : '?') + 'action=logout';
+      
+      try {
+        // Intentar redireccionar de diferentes maneras
+        redirectToUrl(logoutUrl);
+      } catch (error) {
+        console.error('Error al redireccionar:', error);
+        showLogoutError('Error al redireccionar: ' + error.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLogoutError('No se pudo obtener la URL: ' + (error.message || 'Error desconocido'));
+    })
+    .getScriptURL();
+}
+
+/**
+ * Muestra un error en el proceso de logout
+ */
+function showLogoutError(message) {
+  Swal.fire({
+    icon: 'error',
+    title: 'Error al cerrar sesión',
+    text: message,
+    confirmButtonText: 'Entendido'
+  });
+}
+
+/**
+ * Redirecciona a una URL usando diferentes métodos
+ */
+function redirectToUrl(url) {
+  // Método 1: Crear un enlace y simular clic (más compatible)
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_top'; // Importante: asegura que se abra en el contexto superior, no en el iframe
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  
+  // Método 2 (fallback): usar window.top
+  setTimeout(function() {
+    try {
+      window.top.location.href = url;
+    } catch (e) {
+      console.error('Error en redirección fallback:', e);
+    }
+  }, 100);
+}
+
+/**
+ * Redirecciona a la página de logout usando un formulario
+ */
+function redirectToLogout() {
+  // Crear un formulario de redirección para evitar problemas con el iframe
+  const form = document.createElement('form');
+  form.method = 'GET';
+  form.action = 'https://script.google.com/macros/s/SCRIPT_ID/exec'; // Se reemplazará dinámicamente
+  form.target = '_top';
+  
+  // Añadir parámetro de logout
+  const actionInput = document.createElement('input');
+  actionInput.type = 'hidden';
+  actionInput.name = 'action';
+  actionInput.value = 'logout';
+  form.appendChild(actionInput);
+  
+  // Añadir timestamp para evitar caché
+  const timeInput = document.createElement('input');
+  timeInput.type = 'hidden';
+  timeInput.name = 't';
+  timeInput.value = Date.now();
+  form.appendChild(timeInput);
+  
+  // Obtener el ID del script dinámicamente
+  google.script.run
+    .withSuccessHandler(function(url) {
+      if (!url) {
+        showLogoutError('No se pudo obtener la URL de cierre de sesión');
+        return;
+      }
+      
+      // Extraer el ID del script
+      const scriptId = extractScriptId(url);
+      if (scriptId) {
+        form.action = 'https://script.google.com/macros/s/' + scriptId + '/exec';
+      } else {
+        form.action = url;
+      }
+      
+      // Enviar el formulario
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    })
+    .withFailureHandler(function(error) {
+      showLogoutError('No se pudo obtener la URL: ' + (error.message || 'Error desconocido'));
+    })
+    .getScriptURL();
+}
+
+/**
+ * Extrae el ID del script de la URL
+ */
+function extractScriptId(url) {
+  try {
+    const matches = url.match(/\/s\/([a-zA-Z0-9_-]+)/);
+    return matches && matches[1] ? matches[1] : null;
+  } catch (e) {
+    console.error('Error al extraer ID del script:', e);
+    return null;
+  }
+}
+
+// Función para mostrar el modal de Perfil (con manejo del evento de clic)
+function showProfileModal(e) {
+  // Prevenir comportamiento por defecto
+  if (e && e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  Swal.fire({
+    title: 'Perfil de Usuario',
+    html: '<div class="text-start"><p><strong>Nombre:</strong> ' + (window.userName || 'No disponible') + '</p><p><strong>Rol:</strong> ' + (window.userRole || 'No disponible') + '</p><p><strong>Correo:</strong> ' + (window.userEmail || 'No disponible') + '</p></div>',
+    icon: 'info',
+    confirmButtonText: 'Cerrar'
+  });
+  
+  return false;
+}
+
+// Función para mostrar el modal de Configuración (con manejo del evento de clic)
+function showSettingsModal(e) {
+  // Prevenir comportamiento por defecto
+  if (e && e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  Swal.fire({
+    title: 'Configuración',
+    html: '<div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="darkModeSwitch"><label class="form-check-label" for="darkModeSwitch">Modo oscuro</label></div><div class="mb-3"><label for="refreshInterval" class="form-label">Intervalo de actualización</label><select class="form-select" id="refreshInterval"><option value="30000">30 segundos</option><option value="60000">1 minuto</option><option value="300000">5 minutos</option><option value="0">Manual</option></select></div>',
+    icon: 'cog',
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar',
+    preConfirm: function() {
+      // Guardar configuraciones
+      const darkMode = $('#darkModeSwitch').is(':checked');
+      const refreshInterval = $('#refreshInterval').val();
+      
+      localStorage.setItem('darkMode', darkMode);
+      localStorage.setItem('refreshInterval', refreshInterval);
+      
+      // Para futuras implementaciones podemos guardar más configuraciones
+      
+      return {
+        darkMode: darkMode,
+        refreshInterval: refreshInterval
+      };
+    }
+  }).then(function(result) {
+    if (result.isConfirmed) {
+      Swal.fire({
+        title: 'Configuración guardada',
+        icon: 'success',
+        text: 'Algunas configuraciones se aplicarán al recargar la página',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      
+      // Implementar el cambio de tema si se activa
+      if (localStorage.getItem('darkMode') === 'true') {
+        $('body').addClass('dark-mode');
+      } else {
+        $('body').removeClass('dark-mode');
+      }
+      
+      // Actualizar el intervalo de actualización
+      UPDATE_INTERVAL = parseInt(localStorage.getItem('refreshInterval') || '30000');
+    }
+  });
+  
+  // Cargar configuraciones actuales
+  setTimeout(function() {
+    $('#darkModeSwitch').prop('checked', localStorage.getItem('darkMode') === 'true');
+    $('#refreshInterval').val(localStorage.getItem('refreshInterval') || '30000');
+  }, 100);
+  
+  return false;
+}
+
+// Función para cargar una plantilla de módulo
+function loadModuleTemplate(moduleName) {
+  const moduleTitle = getModuleTitle(moduleName);
+  const contentArea = $('#content-area');
+  
+  // Crear contenedor para el módulo
+  const moduleContainer = $('<div class="module-container ' + moduleName + '-container"></div>');
+  
+  // Añadir mensaje de módulo en construcción
+  moduleContainer.html('<div class="row mb-4"><div class="col-12"><div class="card"><div class="card-body text-center py-5"><i class="fas fa-tools fa-4x text-muted mb-3"></i><h3>Módulo de ' + moduleTitle + ' en desarrollo</h3><p class="lead">Esta funcionalidad estará disponible próximamente.</p></div></div></div></div></div>');
+  
+  // Añadir al contenedor principal
+  contentArea.append(moduleContainer);
+  
+  // Mostrar alerta de módulo en construcción
+  showModuleUnderConstruction(moduleName);
+}
+
+/**
+ * Carga el módulo de gestión de usuarios
+ */
+function loadUserManagement() {
+  const contentArea = $('#content-area');
+  
+  // Crear contenedor para el módulo de usuarios
+  const moduleContainer = $('<div class="module-container users-container"></div>');
+  
+  // Mostrar indicador de carga
+  moduleContainer.html('<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div><p class="mt-3">Cargando gestión de usuarios...</p></div>');
+  
+  // Añadir al contenedor principal
+  contentArea.append(moduleContainer);
+  
+  // Cargar la interfaz de usuarios desde el servidor
+  google.script.run
+    .withSuccessHandler(function(userList) {
+      // Actualizar contenido del módulo con la interfaz de usuarios
+      moduleContainer.html('<div class="row mb-4"><div class="col-12"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="card-title mb-0">Gestión de Usuarios</h5><button type="button" class="btn btn-primary btn-sm" onclick="addUserModal()"> <i class="fas fa-plus"></i> Nuevo Usuario</button></div><div class="card-body"><div class="table-responsive"><table class="table table-striped table-hover" id="usersTable"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Última Conexión</th><th>Acciones</th></tr></thead><tbody id="usersList">' + generateUserRows(userList) + '</tbody></table></div></div></div></div></div></div></div>');
+    })
+    .withFailureHandler(function(error) {
+      moduleContainer.html('<div class="row mb-4"><div class="col-12"><div class="card"><div class="card-body text-center py-5"><i class="fas fa-exclamation-circle fa-4x text-danger mb-3"></i><h3>Error al cargar los usuarios</h3><p class="lead">' + (error.message || 'Ha ocurrido un error inesperado') + '</p><button type="button" class="btn btn-primary mt-3" onclick="retryLoadUsers()"> <i class="fas fa-sync-alt"></i> Reintentar</button></div></div></div></div></div></div></div>');
+    })
+    .getUsers(); // Llamar a la función del servidor para obtener usuarios
+}
+
+/**
+ * Genera las filas HTML para la tabla de usuarios
+ */
+function generateUserRows(users) {
+  if (!users || !users.length) {
+    return '<tr><td colspan="6" class="text-center">No hay usuarios registrados</td></tr>';
+  }
+  
+  return users.map(function(user) {
+    const lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleString('es-AR') : 'Nunca';
+    var statusClass = user.status === 'Activo' ? 'text-success' : 'text-danger';
+    
+    return '<tr data-email="' + user.email + '"><td>' + user.email + '</td><td>' + user.name + '</td><td>' + user.role + '</td><td><span class="' + statusClass + '">' + user.status + '</span></td><td>' + lastLogin + '</td><td><div class="btn-group btn-group-sm" role="group"><button type="button" class="btn btn-outline-primary" onclick="editUser(\'' + user.email + '\')"><i class="fas fa-edit"></i></button><button type="button" class="btn btn-outline-danger" onclick="deleteUser(\'' + user.email + '\')"><i class="fas fa-trash-alt"></i></button></div></td></tr>';
+  }).join('');
+}
+
+/**
+ * Reintentar cargar el módulo de usuarios
+ */
+function retryLoadUsers() {
+  $('.users-container').remove();
+  loadUserManagement();
+}
+
+/**
+ * Muestra el modal para añadir un nuevo usuario
+ */
+function addUserModal() {
+  Swal.fire({
+    title: 'Nuevo Usuario',
+    html: '<form id="addUserForm" class="text-start"><div class="mb-3"><label for="userEmail" class="form-label">Email *</label><input type="email" class="form-control" id="userEmail" required></div><div class="mb-3"><label for="userName" class="form-label">Nombre *</label><input type="text" class="form-control" id="userName" required></div><div class="mb-3"><label for="userRole" class="form-label">Rol *</label><select class="form-select" id="userRole" required><option value="">Seleccionar...</option><option value="Administrador">Administrador</option><option value="Supervisor">Supervisor</option><option value="Operador">Operador</option></select></div><div class="mb-3"><label for="userStatus" class="form-label">Estado *</label><select class="form-select" id="userStatus" required><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div></form>',
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar',
+    showLoaderOnConfirm: true,
+    preConfirm: function() {
+      const form = document.getElementById('addUserForm');
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return false;
+      }
+      
+      const userData = {
+        email: document.getElementById('userEmail').value,
+        name: document.getElementById('userName').value,
+        role: document.getElementById('userRole').value,
+        status: document.getElementById('userStatus').value
+      };
+      
+      return new Promise(function(resolve) {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function(error) {
+            Swal.showValidationMessage('Error: ' + (error.message || 'Error desconocido'));
+            resolve(false);
+          })
+          .addUser(userData);
+      });
+    },
+    allowOutsideClick: function() { return !Swal.isLoading(); }
+  }).then(function(result) {
+    if (result.isConfirmed && result.value !== false) {
+      Swal.fire({
+        title: 'Usuario añadido',
+        text: 'El usuario ha sido añadido correctamente',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      }).then(function() {
+        // Recargar la lista de usuarios
+        retryLoadUsers();
+      });
+    }
+  });
+}
+
+/**
+ * Muestra el modal para editar un usuario existente
+ */
+function editUser(email) {
+  // Obtener los datos del usuario desde la fila de la tabla
+  const $row = $('tr[data-email="' + email + '"]');
+  const name = $row.find('td:eq(1)').text();
+  const role = $row.find('td:eq(2)').text();
+  const status = $row.find('td:eq(3)').text();
+  
+  Swal.fire({
+    title: 'Editar Usuario',
+    html: '<form id="editUserForm" class="text-start"><div class="mb-3"><label for="editUserEmail" class="form-label">Email</label><input type="email" class="form-control" id="editUserEmail" value="' + email + '" readonly></div><div class="mb-3"><label for="editUserName" class="form-label">Nombre *</label><input type="text" class="form-control" id="editUserName" value="' + name + '" required></div><div class="mb-3"><label for="editUserRole" class="form-label">Rol *</label><select class="form-select" id="editUserRole" required><option value="Administrador" ' + (role === 'Administrador' ? 'selected' : '') + '>Administrador</option><option value="Supervisor" ' + (role === 'Supervisor' ? 'selected' : '') + '>Supervisor</option><option value="Operador" ' + (role === 'Operador' ? 'selected' : '') + '>Operador</option></select></div><div class="mb-3"><label for="editUserStatus" class="form-label">Estado *</label><select class="form-select" id="editUserStatus" required><option value="Activo" ' + (status.includes('Activo') ? 'selected' : '') + '>Activo</option><option value="Inactivo" ' + (status.includes('Inactivo') ? 'selected' : '') + '>Inactivo</option></select></div></form>',
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar',
+    showLoaderOnConfirm: true,
+    preConfirm: function() {
+      const form = document.getElementById('editUserForm');
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return false;
+      }
+      
+      const userData = {
+        email: document.getElementById('editUserEmail').value,
+        name: document.getElementById('editUserName').value,
+        role: document.getElementById('editUserRole').value,
+        status: document.getElementById('editUserStatus').value
+      };
+      
+      return new Promise(function(resolve) {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function(error) {
+            Swal.showValidationMessage('Error: ' + (error.message || 'Error desconocido'));
+            resolve(false);
+          })
+          .updateUser(userData);
+      });
+    },
+    allowOutsideClick: function() { return !Swal.isLoading(); }
+  }).then(function(result) {
+    if (result.isConfirmed && result.value !== false) {
+      Swal.fire({
+        title: 'Usuario actualizado',
+        text: 'El usuario ha sido actualizado correctamente',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      }).then(function() {
+        // Recargar la lista de usuarios
+        retryLoadUsers();
+      });
+    }
+  });
+}
+
+/**
+ * Muestra el modal de confirmación para eliminar un usuario
+ */
+function deleteUser(email) {
+  Swal.fire({
+    title: '¿Eliminar usuario?',
+    text: '¿Estás seguro de que deseas eliminar al usuario ' + email + '? Esta acción no se puede deshacer.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    showLoaderOnConfirm: true,
+    preConfirm: function() {
+      return new Promise(function(resolve) {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function(error) {
+            Swal.showValidationMessage('Error: ' + (error.message || 'Error desconocido'));
+            resolve(false);
+          })
+          .deleteUser(email);
+      });
+    },
+    allowOutsideClick: function() { return !Swal.isLoading(); }
+  }).then(function(result) {
+    if (result.isConfirmed && result.value !== false) {
+      Swal.fire({
+        title: 'Usuario eliminado',
+        text: 'El usuario ha sido eliminado correctamente',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      }).then(function() {
+        // Recargar la lista de usuarios
+        retryLoadUsers();
+      });
     }
   });
 }
